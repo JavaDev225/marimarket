@@ -179,7 +179,7 @@
             <button onclick="closeModal('movimientosModal')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
             <h3 class="text-lg font-bold text-white mb-1">Movimientos Registrados Hoy</h3>
             <p class="text-xs text-slate-400 mb-4">Historial de facturas y salidas de inventario de la jornada</p>
-            <div id="movimientosList" class="space-y-2 max-h-80 overflow-y-auto text-xs text-slate-300">
+            <div id="movimientosList" class="space-y-3 max-h-80 overflow-y-auto text-xs text-slate-300 pr-1">
                 <p class="text-slate-500 text-center py-4">Sin registro de movimientos recientes.</p>
             </div>
         </div>
@@ -282,6 +282,57 @@
             renderTable(filtered);
         }
 
+        // Renderizado e Historial de Movimientos del Día
+        function renderMovimientos() {
+            const container = document.getElementById('movimientosList');
+            const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
+
+            if (movimientos.length === 0) {
+                container.innerHTML = `<p class="text-slate-500 text-center py-4">Sin registro de movimientos recientes.</p>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            // Renderizar los movimientos más recientes primero
+            movimientos.reverse().forEach(m => {
+                const totalProductos = Array.isArray(m.productos) 
+                    ? m.productos.reduce((acc, p) => acc + (p.cantidad || 0), 0)
+                    : (m.cantidad || 0);
+
+                let detalleProductosHtml = '';
+                if (Array.isArray(m.productos) && m.productos.length > 0) {
+                    detalleProductosHtml = `<ul class="mt-2 space-y-1 pl-2 border-l border-slate-700/80">` +
+                        m.productos.map(p => `<li class="text-[11px] text-slate-400 flex justify-between"><span>• ${p.descripcion || p.id} (x${p.cantidad})</span><span class="font-mono">$${(p.precio * p.cantidad).toFixed(2)}</span></li>`).join('') +
+                        `</ul>`;
+                } else if (m.descripcion) {
+                    detalleProductosHtml = `<p class="text-[11px] text-slate-400 mt-1">• ${m.descripcion} (x${m.cantidad || 1})</p>`;
+                }
+
+                const card = document.createElement('div');
+                card.className = "p-3.5 bg-slate-900/70 border border-slate-700/60 rounded-xl space-y-1.5";
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${m.tipo === 'Factura Directa' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
+                                ${m.numFactura || 'FACTURA'}
+                            </span>
+                            <h4 class="font-semibold text-white text-xs">${m.cliente || 'Cliente General'}</h4>
+                        </div>
+                        <span class="text-[11px] text-slate-400 font-mono">${m.fechaHora || ''}</span>
+                    </div>
+                    ${detalleProductosHtml}
+                    <div class="flex items-center justify-between pt-1.5 text-xs">
+                        <span class="text-slate-400 text-[11px]">Total ítems llevados: <strong class="text-slate-200">${totalProductos}</strong></span>
+                        <div class="text-right font-mono">
+                            <span class="text-emerald-400 font-bold">$${parseFloat(m.total || 0).toFixed(2)}</span>
+                            ${m.totalBs ? `<span class="text-slate-500 text-[10px] block">(${parseFloat(m.totalBs).toFixed(2)} BS)</span>` : ''}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
         // Modales Control
         function openFacturarModal() {
             const select = document.getElementById('facturaProductoSelect');
@@ -294,8 +345,10 @@
         }
 
         function openMovimientosModal() {
+            renderMovimientos();
             document.getElementById('movimientosModal').classList.remove('hidden');
             document.getElementById('movimientosModal').classList.add('flex');
+            if (window.lucide) lucide.createIcons();
         }
 
         function openPanelEdicionModal() {
@@ -327,6 +380,22 @@
             if (prod && prod.cantidad >= cant) {
                 prod.cantidad -= cant;
                 localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+                
+                // Registrar Movimiento de Venta Local
+                const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
+                const totalUsd = prod.precio * cant;
+                const nuevoMovimiento = {
+                    numFactura: `FAC-${Math.floor(1000 + Math.random() * 9000)}`,
+                    cliente: "Cliente Directo",
+                    fechaHora: new Date().toLocaleString(),
+                    productos: [{ id: prod.id, descripcion: prod.descripcion, cantidad: cant, precio: prod.precio }],
+                    total: totalUsd,
+                    totalBs: totalUsd * tasaDia,
+                    tipo: "Venta Directa"
+                };
+                movimientos.push(nuevoMovimiento);
+                localStorage.setItem('sys_movimientos_data', JSON.stringify(movimientos));
+
                 renderDashboard();
                 closeModal('facturarModal');
                 alert(`Factura procesada con éxito: ${cant}x ${prod.descripcion}`);
