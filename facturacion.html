@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Módulo de Facturación | MARY MINIMARKET DMJ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- jsPDF para impresión de Ticket/Factura -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
+
+    <!-- Verificación de Sesión -->
+    <script>
+        if (!localStorage.getItem('sys_auth_token')) {
+            window.location.href = '/index.html';
+        }
+    </script>
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800/80 backdrop-blur-md border-b border-slate-700/60 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <a href="/dashboard.html" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 transition-all" title="Volver al Dashboard">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </a>
+                <div>
+                    <h1 class="text-base font-bold text-white leading-tight">Punto de Venta & Facturación</h1>
+                    <p class="text-xs text-slate-400">Emisión de comprobantes y gestión de carrito</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="openCongeladasModal()" class="px-3.5 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 font-medium text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 relative">
+                    <i data-lucide="snowflake" class="w-4 h-4"></i>
+                    <span>Facturas Congeladas</span>
+                    <span id="badgeCongeladas" class="hidden ml-1 px-1.5 py-0.5 bg-amber-500 text-slate-950 font-bold text-[10px] rounded-full">0</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Catálogo de Productos Disponibles (8 Cols) -->
+        <section class="lg:col-span-7 xl:col-span-8 space-y-4">
+            
+            <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 backdrop-blur-md shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="relative w-full">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        oninput="filterProducts()" 
+                        placeholder="Buscar producto por código o descripción..." 
+                        class="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    >
+                </div>
+            </div>
+
+            <!-- Grid de Catálogo -->
+            <div id="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+                <!-- Carga dinámica -->
+            </div>
+
+        </section>
+
+        <!-- Carrito de Compras & Detalle de Cliente (4 Cols) -->
+        <section class="lg:col-span-5 xl:col-span-4 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 backdrop-blur-md shadow-xl flex flex-col justify-between">
+            
+            <div class="space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="shopping-cart" class="w-5 h-5 text-blue-400"></i>
+                        <h2 class="text-base font-bold text-white">Carrito de Compra</h2>
+                    </div>
+                    <button onclick="congelarFactura()" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-amber-400 font-medium text-xs rounded-lg border border-slate-600/60 transition-all flex items-center gap-1.5" title="Guardar factura temporalmente">
+                        <i data-lucide="snowflake" class="w-3.5 h-3.5"></i>
+                        <span>Congelar</span>
+                    </button>
+                </div>
+
+                <!-- Formulario Datos del Cliente -->
+                <div class="space-y-2 bg-slate-900/50 p-3 rounded-xl border border-slate-700/50 text-xs">
+                    <p class="font-semibold text-slate-300 uppercase text-[10px] tracking-wider mb-1">Datos del Cliente (Obligatorios)</p>
+                    <div>
+                        <input type="text" id="clienteNombre" placeholder="Nombre completo *" class="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <input type="text" id="clienteCedula" placeholder="Cédula / RIF *" class="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Ítems en Carrito -->
+                <div id="cartItemsContainer" class="space-y-2 max-h-56 overflow-y-auto pr-1 text-xs">
+                    <!-- Dinámico -->
+                </div>
+            </div>
+
+            <!-- Resumen de Pagos y Botón Procesar -->
+            <div class="border-t border-slate-700/60 pt-4 mt-4 space-y-3">
+                <div class="space-y-1 text-xs">
+                    <div class="flex justify-between text-slate-400">
+                        <span>Tasa del día:</span>
+                        <span class="font-mono text-slate-200" id="cartTasaDisplay">0.00 BS/USD</span>
+                    </div>
+                    <div class="flex justify-between text-slate-300 text-sm font-semibold">
+                        <span>Total (USD):</span>
+                        <span class="font-mono text-emerald-400" id="cartTotalUSD">$0.00</span>
+                    </div>
+                    <div class="flex justify-between text-slate-400">
+                        <span>Total (BS):</span>
+                        <span class="font-mono text-blue-400" id="cartTotalBS">Bs 0.00</span>
+                    </div>
+                </div>
+
+                <button onclick="procesarFactura()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                    <span>Procesar y Emitir Factura</span>
+                </button>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Modal Facturas Congeladas -->
+    <div id="congeladasModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative">
+            <button onclick="closeCongeladasModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white mb-1 flex items-center gap-2">
+                <i data-lucide="snowflake" class="w-5 h-5 text-amber-400"></i>
+                <span>Facturas Congeladas</span>
+            </h3>
+            <p class="text-xs text-slate-400 mb-4">Selecciona una factura en pausa para restaurarla en el carrito</p>
+            
+            <div id="congeladasList" class="space-y-3 max-h-80 overflow-y-auto text-xs">
+                <!-- Carga dinámica -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Core App Logic -->
+    <script>
+        lucide.createIcons();
+
+        // Variables de Estado
+        let inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
+        let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
+        let cart = [];
+        let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
+
+        // Inicialización
+        function init() {
+            document.getElementById('cartTasaDisplay').innerText = `${tasaDia.toFixed(2)} BS/USD`;
+            renderProductsGrid(inventoryData);
+            renderCart();
+            updateCongeladasBadge();
+        }
+
+        // Renderizar Catálogo (Filtrando stock > 0)
+        function renderProductsGrid(data) {
+            const grid = document.getElementById('productsGrid');
+            grid.innerHTML = '';
+
+            const disponibles = data.filter(p => p.cantidad > 0);
+
+            if (disponibles.length === 0) {
+                grid.innerHTML = `<p class="col-span-full text-center py-10 text-slate-500 text-xs">No hay productos disponibles con existencia en inventario.</p>`;
+                return;
+            }
+
+            disponibles.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-800/60 border border-slate-700/60 hover:border-slate-600 rounded-xl p-3.5 transition-all flex flex-col justify-between gap-3";
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-mono text-[10px] text-blue-400 font-semibold">${item.id}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-700/50 text-slate-300">
+                                Stock: ${item.cantidad} ${item.unidad}
+                            </span>
+                        </div>
+                        <h3 class="text-xs font-semibold text-white line-clamp-2">${item.descripcion}</h3>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-700/40">
+                        <span class="font-mono font-bold text-emerald-400 text-sm">$${parseFloat(item.precio).toFixed(2)}</span>
+                        <button onclick="addToCart('${item.id}')" class="px-2.5 py-1.5 bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 font-medium text-xs rounded-lg transition-all flex items-center gap-1">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                            <span>Añadir</span>
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        // Filtrar productos mediante barra de búsqueda
+        function filterProducts() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = inventoryData.filter(i => 
+                i.id.toLowerCase().includes(query) || 
+                i.descripcion.toLowerCase().includes(query)
+            );
+            renderProductsGrid(filtered);
+        }
+
+        // Agregar producto al carrito
+        function addToCart(id) {
+            const prod = inventoryData.find(p => p.id === id);
+            if (!prod) return;
+
+            const existing = cart.find(item => item.id === id);
+            if (existing) {
+                if (existing.cantidadCart < prod.cantidad) {
+                    existing.cantidadCart += 1;
+                } else {
+                    alert('No hay más stock disponible de este producto.');
+                    return;
+                }
+            } else {
+                cart.push({
+                    id: prod.id,
+                    descripcion: prod.descripcion,
+                    precio: prod.precio,
+                    unidad: prod.unidad,
+                    cantidadCart: 1,
+                    maxStock: prod.cantidad
+                });
+            }
+            renderCart();
+        }
+
+        // Remover ítem del carrito
+        function removeFromCart(id) {
+            cart = cart.filter(item => item.id !== id);
+            renderCart();
+        }
+
+        // Actualizar cantidad desde el carrito
+        function updateCartQty(id, delta) {
+            const item = cart.find(i => i.id === id);
+            if (!item) return;
+
+            const newQty = item.cantidadCart + delta;
+            if (newQty <= 0) {
+                removeFromCart(id);
+            } else if (newQty <= item.maxStock) {
+                item.cantidadCart = newQty;
+                renderCart();
+            } else {
+                alert('Límite de stock alcanzado.');
+            }
+        }
+
+        // Renderizar Carrito
+        function renderCart() {
+            const container = document.getElementById('cartItemsContainer');
+            container.innerHTML = '';
+
+            if (cart.length === 0) {
+                container.innerHTML = `<p class="text-center py-6 text-slate-500">El carrito está vacío.</p>`;
+                document.getElementById('cartTotalUSD').innerText = '$0.00';
+                document.getElementById('cartTotalBS').innerText = 'Bs 0.00';
+                return;
+            }
+
+            let totalUSD = 0;
+
+            cart.forEach(item => {
+                const subtotal = item.precio * item.cantidadCart;
+                totalUSD += subtotal;
+
+                const row = document.createElement('div');
+                row.className = "p-2.5 bg-slate-900/60 border border-slate-700/50 rounded-xl flex items-center justify-between gap-2";
+                row.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <p class="text-white font-medium truncate">${item.descripcion}</p>
+                        <p class="text-[10px] text-slate-400">$${parseFloat(item.precio).toFixed(2)} c/u</p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="updateCartQty('${item.id}', -1)" class="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded"><i data-lucide="minus" class="w-3 h-3"></i></button>
+                        <span class="font-mono text-xs w-5 text-center text-white">${item.cantidadCart}</span>
+                        <button onclick="updateCartQty('${item.id}', 1)" class="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded"><i data-lucide="plus" class="w-3 h-3"></i></button>
+                    </div>
+                    <div class="text-right font-mono text-emerald-400 font-semibold min-w-[50px]">
+                        $${subtotal.toFixed(2)}
+                    </div>
+                    <button onclick="removeFromCart('${item.id}')" class="p-1 text-rose-400 hover:bg-rose-500/10 rounded border border-transparent hover:border-rose-500/20" title="Remover del carrito">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                `;
+                container.appendChild(row);
+            });
+
+            const totalBS = totalUSD * tasaDia;
+            document.getElementById('cartTotalUSD').innerText = `$${totalUSD.toFixed(2)}`;
+            document.getElementById('cartTotalBS').innerText = `Bs ${totalBS.toFixed(2)}`;
+            lucide.createIcons();
+        }
+
+        // Congelar Factura Actual
+        function congelarFactura() {
+            if (cart.length === 0) {
+                alert('El carrito está vacío. Agrega productos antes de congelar.');
+                return;
+            }
+
+            const clienteNombre = document.getElementById('clienteNombre').value.trim();
+            const clienteCedula = document.getElementById('clienteCedula').value.trim();
+
+            const facturaCongelada = {
+                id: `CF-${Date.now()}`,
+                fecha: new Date().toLocaleString(),
+                clienteNombre: clienteNombre || 'Cliente Contado',
+                clienteCedula: clienteCedula || 'S/N',
+                cart: [...cart]
+            };
+
+            congeladas.push(facturaCongelada);
+            localStorage.setItem('sys_facturas_congeladas', JSON.stringify(congeladas));
+
+            // Reset Carrito y Formulario
+            cart = [];
+            document.getElementById('clienteNombre').value = '';
+            document.getElementById('clienteCedula').value = '';
+            renderCart();
+            updateCongeladasBadge();
+
+            alert('Factura congelada y guardada en pausa con éxito.');
+        }
+
+        function updateCongeladasBadge() {
+            const badge = document.getElementById('badgeCongeladas');
+            if (congeladas.length > 0) {
+                badge.innerText = congeladas.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        function openCongeladasModal() {
+            const list = document.getElementById('congeladasList');
+            list.innerHTML = '';
+
+            if (congeladas.length === 0) {
+                list.innerHTML = `<p class="text-center py-6 text-slate-500">No hay facturas congeladas en pausa.</p>`;
+            } else {
+                congeladas.forEach((f, idx) => {
+                    const card = document.createElement('div');
+                    card.className = "p-3 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-between gap-3";
+                    
+                    const totalUSD = f.cart.reduce((acc, i) => acc + (i.precio * i.cantidadCart), 0);
+
+                    card.innerHTML = `
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-white">${f.clienteNombre}</span>
+                                <span class="text-[10px] text-slate-400 font-mono">(${f.clienteCedula})</span>
+                            </div>
+                            <p class="text-[10px] text-slate-500">${f.fecha} &bull; ${f.cart.length} productos</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-mono text-emerald-400 font-bold">$${totalUSD.toFixed(2)}</span>
+                            <button onclick="recuperarFactura(${idx})" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-lg transition-all flex items-center gap-1">
+                                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                                <span>Recuperar</span>
+                            </button>
+                        </div>
+                    `;
+                    list.appendChild(card);
+                });
+            }
+
+            document.getElementById('congeladasModal').classList.remove('hidden');
+            document.getElementById('congeladasModal').classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeCongeladasModal() {
+            document.getElementById('congeladasModal').classList.add('hidden');
+            document.getElementById('congeladasModal').classList.remove('flex');
+        }
+
+        function recuperarFactura(index) {
+            if (cart.length > 0) {
+                if (!confirm('El carrito actual contiene productos. ¿Deseas reemplazarlo con la factura congelada?')) {
+                    return;
+                }
+            }
+
+            const seleccionada = congeladas[index];
+            cart = [...seleccionada.cart];
+            document.getElementById('clienteNombre').value = seleccionada.clienteNombre !== 'Cliente Contado' ? seleccionada.clienteNombre : '';
+            document.getElementById('clienteCedula').value = seleccionada.clienteCedula !== 'S/N' ? seleccionada.clienteCedula : '';
+
+            congeladas.splice(index, 1);
+            localStorage.setItem('sys_facturas_congeladas', JSON.stringify(congeladas));
+
+            renderCart();
+            updateCongeladasBadge();
+            closeCongeladasModal();
+        }
+
+        // Procesar Factura Final
+        function procesarFactura() {
+            const nombre = document.getElementById('clienteNombre').value.trim();
+            const cedula = document.getElementById('clienteCedula').value.trim();
+
+            // Validaciones Estrictas
+            if (!nombre || !cedula) {
+                alert('ERROR: El Nombre del Cliente y la Cédula/RIF son obligatorios para procesar la factura.');
+                return;
+            }
+
+            if (cart.length === 0) {
+                alert('ERROR: El carrito está vacío. Añade productos para facturar.');
+                return;
+            }
+
+            // Descontar inventario
+            cart.forEach(cartItem => {
+                const prod = inventoryData.find(p => p.id === cartItem.id);
+                if (prod) {
+                    prod.cantidad -= cartItem.cantidadCart;
+                }
+            });
+
+            // Guardar inventario actualizado
+            localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+
+            // Generar comprobante PDF
+            generarFacturaPDF(nombre, cedula);
+
+            // Limpiar Carrito
+            cart = [];
+            document.getElementById('clienteNombre').value = '';
+            document.getElementById('clienteCedula').value = '';
+            renderCart();
+            renderProductsGrid(inventoryData);
+
+            alert('Factura procesada con éxito e inventario actualizado.');
+        }
+
+        function generarFacturaPDF(nombre, cedula) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const fecha = new Date().toLocaleString();
+
+            doc.setFontSize(16);
+            doc.text("MARY'S MINIMARKET DMJ", 14, 20);
+            doc.setFontSize(10);
+            doc.text(`COMPROBANTE DE VENTA DE CONTADO`, 14, 26);
+            doc.text(`Fecha/Hora: ${fecha}`, 14, 32);
+            doc.text(`Cliente: ${nombre}`, 14, 38);
+            doc.text(`Cédula/RIF: ${cedula}`, 14, 44);
+            doc.text(`Tasa del Día: ${tasaDia.toFixed(2)} BS/USD`, 14, 50);
+            doc.line(14, 54, 196, 54);
+
+            let y = 62;
+            let totalUSD = 0;
+
+            doc.setFontSize(9);
+            doc.text("Producto", 14, y);
+            doc.text("Cant.", 110, y);
+            doc.text("P.Unit", 140, y);
+            doc.text("Total ($)", 170, y);
+            y += 4;
+            doc.line(14, y, 196, y);
+            y += 6;
+
+            cart.forEach(item => {
+                const subtotal = item.precio * item.cantidadCart;
+                totalUSD += subtotal;
+
+                doc.text(`${item.id} - ${item.descripcion.substring(0, 35)}`, 14, y);
+                doc.text(`${item.cantidadCart}`, 110, y);
+                doc.text(`$${parseFloat(item.precio).toFixed(2)}`, 140, y);
+                doc.text(`$${subtotal.toFixed(2)}`, 170, y);
+                y += 6;
+            });
+
+            const totalBS = totalUSD * tasaDia;
+            doc.line(14, y, 196, y);
+            y += 8;
+            doc.setFontSize(11);
+            doc.text(`TOTAL FACTURA (USD): $${totalUSD.toFixed(2)}`, 14, y);
+            doc.text(`TOTAL FACTURA (BS): Bs ${totalBS.toFixed(2)}`, 14, y + 6);
+
+            doc.save(`Factura_${cedula}_${Date.now()}.pdf`);
+        }
+
+        // Ejecutar inicialización al cargar
+        init();
+    </script>
+</body>
+</html>
