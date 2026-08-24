@@ -424,6 +424,9 @@
                 return;
             }
 
+            // Generar comprobante PDF ANTES de vaciar el carrito
+            generarFacturaPDF(nombre, cedula);
+
             // Descontar inventario
             cart.forEach(cartItem => {
                 const prod = inventoryData.find(p => p.id === cartItem.id);
@@ -432,11 +435,8 @@
                 }
             });
 
-            // Guardar inventario actualizado
+            // Guardar inventario actualizado en localStorage
             localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
-
-            // Generar comprobante PDF
-            generarFacturaPDF(nombre, cedula);
 
             // Limpiar Carrito
             cart = [];
