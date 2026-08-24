@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MARY'S MINIMARKET DMJ | ERP Inventario & Facturación</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- jsPDF para reporte de Cierre de Turno -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
+
+    <!-- Verificación de Sesión -->
+    <script>
+        if (!localStorage.getItem('sys_auth_token')) {
+            window.location.href = '/index.html';
+        }
+    </script>
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-800/80 backdrop-blur-md border-b border-slate-700/60 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-500 flex items-center justify-center font-bold">
+                    <i data-lucide="box" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold text-white leading-tight">Marimarket ERP</h1>
+                    <p class="text-xs text-slate-400">Control de Inventario & Ventas</p>
+                </div>
+            </div>
+
+            <!-- Acciones Rápidas Principal -->
+            <div class="flex items-center gap-2 sm:gap-3">
+                <button onclick="openFacturarModal()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center gap-2">
+                    <i data-lucide="receipt" class="w-4 h-4"></i>
+                    <span>Facturar</span>
+                </button>
+                <button onclick="openMovimientosModal()" class="px-3.5 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium text-xs sm:text-sm rounded-xl border border-slate-600/60 transition-all flex items-center gap-2">
+                    <i data-lucide="history" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Movimientos del Día</span>
+                </button>
+                <button onclick="cerrarTurnoPDF()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2">
+                    <i data-lucide="file-check-2" class="w-4 h-4"></i>
+                    <span>Cerrar Turno</span>
+                </button>
+                <button onclick="openPanelEdicionModal()" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 transition-all" title="Panel de Edición">
+                    <i data-lucide="sliders" class="w-5 h-5"></i>
+                </button>
+                <div class="h-6 w-px bg-slate-700 mx-1"></div>
+                <button onclick="logout()" class="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl transition-all" title="Cerrar Sesión">
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Metrics Grid (Tarjetas de Métricas) -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <!-- Stock Bajo -->
+            <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 backdrop-blur-md shadow-xl flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Alertas de Stock Bajo</p>
+                    <h3 id="metricStockBajo" class="text-2xl font-bold text-amber-400 mt-1">0 <span class="text-xs font-normal text-slate-400">ítems</span></h3>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+            <!-- Valor del Inventario -->
+            <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 backdrop-blur-md shadow-xl flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Valor total de Inventario</p>
+                    <h3 id="metricValorTotal" class="text-2xl font-bold text-emerald-400 mt-1">$0.00</h3>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <i data-lucide="dollar-sign" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+            <!-- Tasa del Día -->
+            <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-5 backdrop-blur-md shadow-xl flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tasa Oficial del Día</p>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <h3 id="metricTasaDia" class="text-2xl font-bold text-blue-400">0.00</h3>
+                        <span class="text-xs text-slate-400 font-medium">BS/USD</span>
+                    </div>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <i data-lucide="trending-up" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Tabla de Inventario Principal -->
+        <section class="bg-slate-800/80 border border-slate-700/60 rounded-2xl shadow-xl overflow-hidden backdrop-blur-md">
+            
+            <div class="p-5 border-b border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-white">Inventario General</h2>
+                    <p class="text-xs text-slate-400 mt-0.5">Vista detallada de existencias e identificadores de catálogo</p>
+                </div>
+                <div class="relative w-full sm:w-64">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        oninput="filterTable()" 
+                        placeholder="Buscar por ID o descripción..." 
+                        class="w-full pl-9 pr-4 py-2 bg-slate-900/60 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    >
+                </div>
+            </div>
+
+            <!-- Table Wrapper -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="bg-slate-900/40 text-xs uppercase font-semibold text-slate-400 border-b border-slate-700/60">
+                        <tr>
+                            <th class="py-3.5 px-5">ID / Código</th>
+                            <th class="py-3.5 px-5">Descripción</th>
+                            <th class="py-3.5 px-5 text-center">Cantidad</th>
+                            <th class="py-3.5 px-5 text-center">Unidad</th>
+                            <th class="py-3.5 px-5 text-right">Precio Unit. ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryTableBody" class="divide-y divide-slate-700/50 text-xs">
+                        <!-- Carga dinámica vía JS -->
+                        <tr>
+                            <td colspan="5" class="text-center py-8 text-slate-500">Cargando datos del inventario...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Modal Facturar -->
+    <div id="facturarModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+            <button onclick="closeModal('facturarModal')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white mb-1">Módulo de Facturación</h3>
+            <p class="text-xs text-slate-400 mb-4">Genera una nueva venta directa en el sistema</p>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-slate-300 mb-1">Seleccionar Producto</label>
+                    <select id="facturaProductoSelect" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white">
+                        <!-- Dinámico -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-300 mb-1">Cantidad a Vender</label>
+                    <input type="number" id="facturaCantidad" min="1" value="1" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white">
+                </div>
+                <button onclick="procesarVenta()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl shadow-lg transition-all mt-2">
+                    Completar Factura
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Movimientos del Día -->
+    <div id="movimientosModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative">
+            <button onclick="closeModal('movimientosModal')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white mb-1">Movimientos Registrados Hoy</h3>
+            <p class="text-xs text-slate-400 mb-4">Historial de facturas y salidas de inventario de la jornada</p>
+            <div id="movimientosList" class="space-y-2 max-h-80 overflow-y-auto text-xs text-slate-300">
+                <p class="text-slate-500 text-center py-4">Sin registro de movimientos recientes.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Panel de Edición / Ajuste -->
+    <div id="panelEdicionModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button onclick="closeModal('panelEdicionModal')" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white mb-1">Panel de Edición Rápida</h3>
+            <p class="text-xs text-slate-400 mb-4">Ajuste de tasa de cambio y stock de items</p>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-slate-300 mb-1">Actualizar Tasa del Día (BS/USD)</label>
+                    <input type="number" step="0.01" id="inputTasa" placeholder="Ej. 36.50" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white">
+                </div>
+                <button onclick="guardarTasa()" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-all">
+                    Actualizar Tasa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core App Logic -->
+    <script>
+        lucide.createIcons();
+
+        // Variables de Estado
+        let inventoryData = [];
+        let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
+
+        // Configuración Supabase JS Client
+        const SUPABASE_URL = "PROCESSED_BY_ENV_OR_DIRECT_CONFIG"; 
+        const SUPABASE_KEY = "PROCESSED_BY_ENV_OR_DIRECT_CONFIG";
+        
+        // Mocking Data Fallback o conexión directa Supabase
+        async function fetchInventoryData() {
+            // Ejemplo de carga inicial
+            inventoryData = [
+                { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
+                { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
+                { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
+                { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
+                { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
+            ];
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            renderTable(inventoryData);
+            calculateMetrics();
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('inventoryTableBody');
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-slate-500">No se encontraron productos.</td></tr>`;
+                return;
+            }
+
+            data.forEach(item => {
+                const isLowStock = item.cantidad <= 5;
+                const row = document.createElement('tr');
+                row.className = "hover:bg-slate-800/40 transition-colors";
+                row.innerHTML = `
+                    <td class="py-3 px-5 font-mono text-blue-400 font-medium">${item.id}</td>
+                    <td class="py-3 px-5 text-white font-medium">${item.descripcion}</td>
+                    <td class="py-3 px-5 text-center">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${isLowStock ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-700/50 text-slate-200'}">
+                            ${item.cantidad}
+                        </span>
+                    </td>
+                    <td class="py-3 px-5 text-center text-slate-400">${item.unidad}</td>
+                    <td class="py-3 px-5 text-right font-mono text-emerald-400">$${parseFloat(item.precio).toFixed(2)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function calculateMetrics() {
+            // Stock Bajo
+            const lowStockCount = inventoryData.filter(i => i.cantidad <= 5).length;
+            document.getElementById('metricStockBajo').innerText = `${lowStockCount} ítems`;
+
+            // Valor total
+            const totalValue = inventoryData.reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
+            document.getElementById('metricValorTotal').innerText = `$${totalValue.toFixed(2)}`;
+
+            // Tasa del día
+            document.getElementById('metricTasaDia').innerText = tasaDia.toFixed(2);
+        }
+
+        function filterTable() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = inventoryData.filter(i => 
+                i.id.toLowerCase().includes(query) || 
+                i.descripcion.toLowerCase().includes(query)
+            );
+            renderTable(filtered);
+        }
+
+        // Modales Control
+        function openFacturarModal() {
+            const select = document.getElementById('facturaProductoSelect');
+            select.innerHTML = '';
+            inventoryData.forEach(p => {
+                select.innerHTML += `<option value="${p.id}">${p.descripcion} (Stock: ${p.cantidad}) - $${p.precio}</option>`;
+            });
+            document.getElementById('facturarModal').classList.remove('hidden');
+            document.getElementById('facturarModal').classList.add('flex');
+        }
+
+        function openMovimientosModal() {
+            document.getElementById('movimientosModal').classList.remove('hidden');
+            document.getElementById('movimientosModal').classList.add('flex');
+        }
+
+        function openPanelEdicionModal() {
+            document.getElementById('inputTasa').value = tasaDia;
+            document.getElementById('panelEdicionModal').classList.remove('hidden');
+            document.getElementById('panelEdicionModal').classList.add('flex');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
+        }
+
+        function guardarTasa() {
+            const val = parseFloat(document.getElementById('inputTasa').value);
+            if (val > 0) {
+                tasaDia = val;
+                localStorage.setItem('sys_tasa_dia', tasaDia);
+                calculateMetrics();
+                closeModal('panelEdicionModal');
+            }
+        }
+
+        function procesarVenta() {
+            const prodId = document.getElementById('facturaProductoSelect').value;
+            const cant = parseInt(document.getElementById('facturaCantidad').value);
+            const prod = inventoryData.find(p => p.id === prodId);
+
+            if (prod && prod.cantidad >= cant) {
+                prod.cantidad -= cant;
+                renderDashboard();
+                closeModal('facturarModal');
+                alert(`Factura procesada con éxito: ${cant}x ${prod.descripcion}`);
+            } else {
+                alert('Stock insuficiente para procesar la transacción.');
+            }
+        }
+
+        // Generar Cierre de Turno en PDF
+        function cerrarTurnoPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const fecha = new Date().toLocaleString();
+
+            doc.setFontSize(16);
+            doc.text("COMPROBANTE DE CIERRE DE TURNO", 14, 20);
+            doc.setFontSize(10);
+            doc.text(`Fecha/Hora: ${fecha}`, 14, 28);
+            doc.text(`Tasa de Cambio Oficial: ${tasaDia.toFixed(2)} BS/USD`, 14, 34);
+            doc.line(14, 38, 196, 38);
+
+            doc.setFontSize(12);
+            doc.text("Resumen de Inventario en Cierre:", 14, 46);
+
+            let y = 54;
+            inventoryData.forEach((item, index) => {
+                doc.setFontSize(9);
+                doc.text(`${item.id} - ${item.descripcion} | Stock: ${item.cantidad} ${item.unidad} | $${item.precio}`, 14, y);
+                y += 6;
+            });
+
+            doc.save(`Cierre_Turno_${Date.now()}.pdf`);
+        }
+
+        function logout() {
+            localStorage.removeItem('sys_auth_token');
+            window.location.href = '/index.html';
+        }
+
+        // Inicializar
+        fetchInventoryData();
+    </script>
+</body>
+</html>
