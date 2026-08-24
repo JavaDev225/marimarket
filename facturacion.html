@@ -8,8 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- jsPDF para impresión de Ticket/Factura -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
 
@@ -144,6 +142,25 @@
         </div>
     </div>
 
+    <!-- Modal de Notificación: Factura Procesada Con Éxito -->
+    <div id="successModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-800 border border-slate-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl text-center relative space-y-4">
+            <div class="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+                <i data-lucide="check-circle" class="w-10 h-10"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold text-white tracking-tight">¡FACTURA PROCESADA CON ÉXITO!</h3>
+                <p class="text-xs text-slate-400 mt-1">La transacción ha sido registrada correctamente en el sistema.</p>
+            </div>
+            <div id="successModalDetails" class="bg-slate-900/60 border border-slate-700/50 rounded-2xl p-4 text-left text-xs space-y-2 font-mono text-slate-300">
+                <!-- Detalles agregados dinámicamente -->
+            </div>
+            <button onclick="closeSuccessModal()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition-all">
+                Aceptar y Continuar
+            </button>
+        </div>
+    </div>
+
     <!-- Core App Logic -->
     <script>
         lucide.createIcons();
@@ -153,6 +170,7 @@
         let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
         let cart = [];
         let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
+        let movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
 
         // Inicialización
         function init() {
@@ -424,8 +442,30 @@
                 return;
             }
 
-            // Generar comprobante PDF ANTES de vaciar el carrito
-            generarFacturaPDF(nombre, cedula);
+            const fechaHora = new Date().toLocaleString();
+            const totalUSD = cart.reduce((acc, i) => acc + (i.precio * i.cantidadCart), 0);
+            const totalBS = totalUSD * tasaDia;
+
+            // Registrar movimiento en el historial del día
+            const nuevoMovimiento = {
+                id: `FAC-${Date.now()}`,
+                fechaHora: fechaHora,
+                clienteNombre: nombre,
+                clienteCedula: cedula,
+                detalles: cart.map(item => ({
+                    id: item.id,
+                    descripcion: item.descripcion,
+                    cantidad: item.cantidadCart,
+                    precioUnitario: item.precio,
+                    subtotal: item.precio * item.cantidadCart
+                })),
+                totalUSD: totalUSD,
+                totalBS: totalBS,
+                tasaDia: tasaDia
+            };
+
+            movimientosDia.push(nuevoMovimiento);
+            localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientosDia));
 
             // Descontar inventario
             cart.forEach(cartItem => {
@@ -438,62 +478,53 @@
             // Guardar inventario actualizado en localStorage
             localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
 
-            // Limpiar Carrito
+            // Mostrar modal visual de confirmación
+            showSuccessModal(nuevoMovimiento);
+
+            // Limpiar Carrito y formulario
             cart = [];
             document.getElementById('clienteNombre').value = '';
             document.getElementById('clienteCedula').value = '';
             renderCart();
             renderProductsGrid(inventoryData);
-
-            alert('Factura procesada con éxito e inventario actualizado.');
         }
 
-        function generarFacturaPDF(nombre, cedula) {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const fecha = new Date().toLocaleString();
+        function showSuccessModal(movimiento) {
+            const container = document.getElementById('successModalDetails');
+            container.innerHTML = `
+                <div class="flex justify-between border-b border-slate-700/60 pb-1 text-slate-400">
+                    <span>Nº Transacción:</span>
+                    <span class="text-white font-semibold">${movimiento.id}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Cliente:</span>
+                    <span class="text-white">${movimiento.clienteNombre}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Cédula/RIF:</span>
+                    <span class="text-white">${movimiento.clienteCedula}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Fecha/Hora:</span>
+                    <span class="text-slate-300 text-[11px]">${movimiento.fechaHora}</span>
+                </div>
+                <div class="border-t border-slate-700/60 pt-1 flex justify-between font-bold">
+                    <span class="text-slate-300">Total USD:</span>
+                    <span class="text-emerald-400">$${movimiento.totalUSD.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between font-bold">
+                    <span class="text-slate-300">Total BS:</span>
+                    <span class="text-blue-400">Bs ${movimiento.totalBS.toFixed(2)}</span>
+                </div>
+            `;
+            document.getElementById('successModal').classList.remove('hidden');
+            document.getElementById('successModal').classList.add('flex');
+            lucide.createIcons();
+        }
 
-            doc.setFontSize(16);
-            doc.text("MARY'S MINIMARKET DMJ", 14, 20);
-            doc.setFontSize(10);
-            doc.text(`COMPROBANTE DE VENTA DE CONTADO`, 14, 26);
-            doc.text(`Fecha/Hora: ${fecha}`, 14, 32);
-            doc.text(`Cliente: ${nombre}`, 14, 38);
-            doc.text(`Cédula/RIF: ${cedula}`, 14, 44);
-            doc.text(`Tasa del Día: ${tasaDia.toFixed(2)} BS/USD`, 14, 50);
-            doc.line(14, 54, 196, 54);
-
-            let y = 62;
-            let totalUSD = 0;
-
-            doc.setFontSize(9);
-            doc.text("Producto", 14, y);
-            doc.text("Cant.", 110, y);
-            doc.text("P.Unit", 140, y);
-            doc.text("Total ($)", 170, y);
-            y += 4;
-            doc.line(14, y, 196, y);
-            y += 6;
-
-            cart.forEach(item => {
-                const subtotal = item.precio * item.cantidadCart;
-                totalUSD += subtotal;
-
-                doc.text(`${item.id} - ${item.descripcion.substring(0, 35)}`, 14, y);
-                doc.text(`${item.cantidadCart}`, 110, y);
-                doc.text(`$${parseFloat(item.precio).toFixed(2)}`, 140, y);
-                doc.text(`$${subtotal.toFixed(2)}`, 170, y);
-                y += 6;
-            });
-
-            const totalBS = totalUSD * tasaDia;
-            doc.line(14, y, 196, y);
-            y += 8;
-            doc.setFontSize(11);
-            doc.text(`TOTAL FACTURA (USD): $${totalUSD.toFixed(2)}`, 14, y);
-            doc.text(`TOTAL FACTURA (BS): Bs ${totalBS.toFixed(2)}`, 14, y + 6);
-
-            doc.save(`Factura_${cedula}_${Date.now()}.pdf`);
+        function closeSuccessModal() {
+            document.getElementById('successModal').classList.add('hidden');
+            document.getElementById('successModal').classList.remove('flex');
         }
 
         // Ejecutar inicialización al cargar
