@@ -1,0 +1,20 @@
+export default async function handler(req, res) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, message: 'Método no permitido' });
+    }
+
+    const { password } = req.body;
+    const SYSTEM_KEY = process.env.SYSTEM_ACCESS_KEY || "JMXPW823";
+
+    if (password === SYSTEM_KEY) {
+        return res.status(200).json({ 
+            success: true, 
+            token: "session_valid_token_xyz" 
+        });
+    }
+
+    return res.status(401).json({ 
+        success: false, 
+        message: 'Clave de acceso incorrecta.' 
+    });
+}
