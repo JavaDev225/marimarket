@@ -25,7 +25,7 @@
                 <i data-lucide="check-circle" class="w-10 h-10"></i>
             </div>
             <h3 class="text-xl font-black text-white tracking-wide uppercase mb-1">FACTURA PROCESADA CON ÉXITO</h3>
-            <p class="text-xs text-slate-400 mb-6">La venta se registro en el inventario y en los Movimientos del Día correctamente.</p>
+            <p class="text-xs text-slate-400 mb-6">La venta se registró en el inventario y en los Movimientos del Día correctamente.</p>
             <button onclick="closeSuccessModal()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2">
                 <span>Aceptar y Continuar</span>
             </button>
@@ -475,7 +475,8 @@
                 }))
             };
 
-            // Guardar en Movimientos del Día
+            // Re-obtener los movimientos de localStorage para garantizar la sincronización
+            movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
             movimientosDia.unshift(nuevaVenta);
             localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientosDia));
 
