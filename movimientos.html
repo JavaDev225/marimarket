@@ -53,7 +53,7 @@
 
         <!-- Tabla / Lista de Movimientos -->
         <section class="bg-slate-800/80 border border-slate-700/60 rounded-2xl shadow-xl overflow-hidden backdrop-blur-md">
-            
+
             <div class="p-5 border-b border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h2 class="text-lg font-bold text-white">Facturas Emitidas</h2>
                 <div class="relative w-full sm:w-64">
@@ -84,10 +84,18 @@
 
         let movimientosData = [];
 
-        // 1. Carga, Depuración de >7 Días y Renderizado
+        // 1. Carga, Depuración de >7 Días y Renderizado (Sincronizado con sys_movimientos_dia)
         function cargarYLimpiarMovimientos() {
+            const rawDia = localStorage.getItem('sys_movimientos_dia');
             const rawData = localStorage.getItem('sys_movimientos_data');
-            let movimientos = rawData ? JSON.parse(rawData) : [];
+            
+            // Prioriza sys_movimientos_dia o une ambas fuentes si existen
+            let movimientos = [];
+            if (rawDia) {
+                movimientos = JSON.parse(rawDia);
+            } else if (rawData) {
+                movimientos = JSON.parse(rawData);
+            }
 
             const UN_DIA_MS = 24 * 60 * 60 * 1000;
             const SIETE_DIAS_MS = 7 * UN_DIA_MS;
@@ -96,15 +104,16 @@
             // Filtrado de retención: mantiene registros con antigüedad menor o igual a 7 días
             const movimientosValidos = movimientos.filter(mov => {
                 const fechaMov = mov.timestamp ? new Date(mov.timestamp).getTime() : new Date(mov.fechaHora || mov.fecha).getTime();
-                
+
                 // Si la fecha no es procesable, se mantiene por precaución
                 if (isNaN(fechaMov)) return true;
 
                 return (ahora - fechaMov) <= SIETE_DIAS_MS;
             });
 
-            // Si se eliminaron facturas obsoletas, actualizamos el almacenamiento local
+            // Si se eliminaron facturas obsoletas, actualizamos ambas claves para consistencia
             if (movimientosValidos.length !== movimientos.length) {
+                localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientosValidos));
                 localStorage.setItem('sys_movimientos_data', JSON.stringify(movimientosValidos));
             }
 
@@ -135,25 +144,34 @@
 
             listaOrdenada.forEach((mov, index) => {
                 const idDesplegable = `detalle-${index}`;
-                const items = mov.items || mov.productos || [];
+                // Adaptación de propiedades compatibles entre facturacion.html y movimientos.html
+                const items = mov.detalles || mov.items || mov.productos || [];
                 const numFac = mov.numFactura || mov.id || `FAC-${index + 1}`;
-                const cliente = mov.cliente || "Cliente General";
-                const fecha = mov.fechaHora || mov.fecha || "Fecha no registrada";
-                const totalUSD = parseFloat(mov.total || mov.totalUSD || 0).toFixed(2);
-                const totalBS = (mov.totalBs || mov.totalBS) ? parseFloat(mov.totalBs || mov.totalBS).toFixed(2) : null;
+                const clienteNombre = mov.clienteNombre || mov.cliente || "Cliente General";
+                const clienteCedula = mov.clienteCedula ? ` (${mov.clienteCedula})` : '';
+                const cliente = `${clienteNombre}${clienteCedula}`;
+                const fecha = mov.hora ? `${mov.fecha} - ${mov.hora}` : (mov.fechaHora || mov.fecha || "Fecha no registrada");
+                const totalUSD = parseFloat(mov.totalUSD || mov.total || 0).toFixed(2);
+                const totalBS = (mov.totalBS || mov.totalBs) ? parseFloat(mov.totalBS || mov.totalBs).toFixed(2) : null;
 
                 const card = document.createElement('div');
                 card.className = "p-4 hover:bg-slate-800/40 transition-colors";
 
-                let filasDetalle = items.map(prod => `
-                    <tr class="border-b border-slate-700/30 text-[11px]">
-                        <td class="py-2 font-mono text-blue-400">${prod.id || 'N/A'}</td>
-                        <td class="py-2 text-slate-200">${prod.descripcion || prod.nombre || 'Producto'}</td>
-                        <td class="py-2 text-center text-slate-300">${prod.cantidad}</td>
-                        <td class="py-2 text-right font-mono text-emerald-400">$${parseFloat(prod.precio || prod.precioUnitario || 0).toFixed(2)}</td>
-                        <td class="py-2 text-right font-mono text-white">$${(parseFloat(prod.precio || prod.precioUnitario || 0) * prod.cantidad).toFixed(2)}</td>
-                    </tr>
-                `).join('');
+                let filasDetalle = items.map(prod => {
+                    const cant = prod.cantidadCart || prod.cantidad || 1;
+                    const prec = parseFloat(prod.precioUnitarioUSD || prod.precio || prod.precioUnitario || 0);
+                    const subt = parseFloat(prod.subtotalUSD || (prec * cant));
+                    
+                    return `
+                        <tr class="border-b border-slate-700/30 text-[11px]">
+                            <td class="py-2 font-mono text-blue-400">${prod.id || 'N/A'}</td>
+                            <td class="py-2 text-slate-200">${prod.descripcion || prod.nombre || 'Producto'}</td>
+                            <td class="py-2 text-center text-slate-300">${cant}</td>
+                            <td class="py-2 text-right font-mono text-emerald-400">$${prec.toFixed(2)}</td>
+                            <td class="py-2 text-right font-mono text-white">$${subt.toFixed(2)}</td>
+                        </tr>
+                    `;
+                }).join('');
 
                 card.innerHTML = `
                     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -224,9 +242,10 @@
         function filtrarMovimientos() {
             const query = document.getElementById('searchMovimiento').value.toLowerCase();
             const filtrados = movimientosData.filter(m => {
-                const cliente = (m.cliente || '').toLowerCase();
+                const cliente = (m.clienteNombre || m.cliente || '').toLowerCase();
+                const cedula = (m.clienteCedula || '').toLowerCase();
                 const num = (m.numFactura || m.id || '').toLowerCase();
-                return cliente.includes(query) || num.includes(query);
+                return cliente.includes(query) || cedula.includes(query) || num.includes(query);
             });
             renderMovimientos(filtrados);
         }
