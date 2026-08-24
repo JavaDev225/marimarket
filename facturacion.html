@@ -435,7 +435,7 @@
             window.location.href = '/dashboard.html';
         }
 
-        // Procesar Factura Final
+        // Procesar Factura Final y Guardar Automáticamente en Movimientos
         function procesarFactura() {
             const nombre = document.getElementById('clienteNombre').value.trim();
             const cedula = document.getElementById('clienteCedula').value.trim();
@@ -455,9 +455,10 @@
             const totalUSD = cart.reduce((acc, i) => acc + (i.precio * i.cantidadCart), 0);
             const totalBS = totalUSD * tasaDia;
 
-            // Estructurar Registro para Movimientos del Día
+            // Estructura normalizada de la venta para ser leída por movimientos.html
             const nuevaVenta = {
                 id: `FAC-${Date.now()}`,
+                tipo: 'VENTA',
                 clienteNombre: nombre,
                 clienteCedula: cedula,
                 fecha: now.toLocaleDateString(),
@@ -466,6 +467,7 @@
                 tasaDia: tasaDia,
                 totalUSD: totalUSD,
                 totalBS: totalBS,
+                metodoPago: 'Punto / Mixto',
                 detalles: cart.map(item => ({
                     id: item.id,
                     descripcion: item.descripcion,
@@ -475,10 +477,10 @@
                 }))
             };
 
-            // Re-obtener los movimientos de localStorage para garantizar la sincronización
-            movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
-            movimientosDia.unshift(nuevaVenta);
-            localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientosDia));
+            // Lectura, actualización y guardado persistente en LocalStorage
+            let movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
+            movimientos.unshift(nuevaVenta);
+            localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
 
             // Descontar inventario
             cart.forEach(cartItem => {
