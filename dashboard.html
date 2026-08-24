@@ -217,13 +217,22 @@
         
         // Carga de inventario sincronizado desde localStorage
         async function fetchInventoryData() {
-            inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [
-                { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
-                { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
-                { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
-                { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
-                { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
-            ];
+            const storedData = localStorage.getItem('sys_inventory_data');
+            
+            if (storedData) {
+                inventoryData = JSON.parse(storedData);
+            } else {
+                // Si no existen datos guardados, se cargan los iniciales y se persisten inmediatamente
+                inventoryData = [
+                    { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
+                    { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
+                    { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
+                    { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
+                    { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
+                ];
+                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+            }
+
             renderDashboard();
         }
 
