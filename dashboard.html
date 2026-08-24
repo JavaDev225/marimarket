@@ -49,7 +49,7 @@
                     <i data-lucide="file-check-2" class="w-4 h-4"></i>
                     <span>Cerrar Turno</span>
                 </button>
-                <button onclick="openPanelEdicionModal()" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 transition-all" title="Panel de Edición">
+                <button onclick="window.location.href = '/paneledicion.html'" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-slate-300 transition-all" title="Panel de Edición">
                     <i data-lucide="sliders" class="w-5 h-5"></i>
                 </button>
                 <div class="h-6 w-px bg-slate-700 mx-1"></div>
@@ -215,10 +215,9 @@
         const SUPABASE_URL = "PROCESSED_BY_ENV_OR_DIRECT_CONFIG"; 
         const SUPABASE_KEY = "PROCESSED_BY_ENV_OR_DIRECT_CONFIG";
         
-        // Mocking Data Fallback o conexión directa Supabase
+        // Carga de inventario sincronizado desde localStorage
         async function fetchInventoryData() {
-            // Ejemplo de carga inicial
-            inventoryData = [
+            inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [
                 { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
                 { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
                 { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
@@ -327,6 +326,7 @@
 
             if (prod && prod.cantidad >= cant) {
                 prod.cantidad -= cant;
+                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
                 renderDashboard();
                 closeModal('facturarModal');
                 alert(`Factura procesada con éxito: ${cant}x ${prod.descripcion}`);
