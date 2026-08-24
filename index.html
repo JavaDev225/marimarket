@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Acceso al Sistema | ERP Inventario & Facturación</title>
+    <title>Acceso al Sistema | MARY'S MARKET DMJ</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -111,7 +111,7 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    // Guardar token/sesión ligera en localStorage
+                    // Guardar token/sesión en localStorage y redirigir
                     localStorage.setItem('sys_auth_token', data.token);
                     window.location.href = '/dashboard.html';
                 } else {
