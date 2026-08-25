@@ -186,6 +186,16 @@
             init();
         });
 
+        // Escuchador de cambios en tiempo real desde otras pestañas/ventanas (panel de edición o inventario)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'sys_inventory_data' || e.key === 'sys_tasa_dia' || e.key === 'sys_facturas_congeladas') {
+                if (e.key === 'sys_facturas_congeladas') {
+                    congeladas = JSON.parse(e.newValue) || [];
+                }
+                init();
+            }
+        });
+
         // Renderizar Catálogo (Filtrando estrictamente productos con existencia > 0)
         function renderProductsGrid(data) {
             const grid = document.getElementById('productsGrid');
