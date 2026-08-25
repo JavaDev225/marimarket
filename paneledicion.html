@@ -94,11 +94,7 @@
                 <input type="hidden" id="editItemOriginalId">
                 
                 <div>
-                    <label class="block text-slate-300 mb-1">Código / ID</label>
-                    <input type="text" id="inputCodigo" required placeholder="Ej: P-001" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-slate-300 mb-1">Descripción</label>
+                    <label class="block text-slate-300 mb-1">Descripción / Nombre</label>
                     <input type="text" id="inputDescripcion" required placeholder="Nombre del producto" class="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -212,21 +208,20 @@
         async function guardarProducto(e) {
             e.preventDefault();
             const originalId = document.getElementById('editItemOriginalId').value;
-            const id = document.getElementById('inputCodigo').value.trim();
             const descripcion = document.getElementById('inputDescripcion').value.trim();
             const cantidad = parseFloat(document.getElementById('inputCantidad').value);
             const unidad = document.getElementById('inputUnidad').value;
             const precio = parseFloat(document.getElementById('inputPrecio').value);
 
-            const payload = { id, descripcion, cantidad, unidad, precio };
+            const payload = { descripcion, cantidad, unidad, precio };
 
             try {
                 if (originalId) {
-                    // Actualizar
+                    // Actualizar registro existente
                     const { error } = await supabaseClient.from('productos').update(payload).eq('id', originalId);
                     if (error) throw error;
                 } else {
-                    // Insertar nuevo
+                    // Insertar nuevo registro (ID lo genera automáticamente Supabase/PostgreSQL)
                     const { error } = await supabaseClient.from('productos').insert([payload]);
                     if (error) throw error;
                 }
@@ -254,7 +249,6 @@
             document.getElementById('modalTitle').innerText = "Nuevo Producto";
             document.getElementById('editItemOriginalId').value = "";
             document.getElementById('productForm').reset();
-            document.getElementById('inputCodigo').disabled = false;
             document.getElementById('productModal').classList.remove('hidden');
             document.getElementById('productModal').classList.add('flex');
         }
@@ -265,7 +259,6 @@
 
             document.getElementById('modalTitle').innerText = "Editar Producto";
             document.getElementById('editItemOriginalId').value = item.id;
-            document.getElementById('inputCodigo').value = item.id;
             document.getElementById('inputDescripcion').value = item.descripcion;
             document.getElementById('inputCantidad').value = item.cantidad;
             document.getElementById('inputUnidad').value = item.unidad;
