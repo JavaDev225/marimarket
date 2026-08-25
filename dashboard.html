@@ -235,8 +235,7 @@
             const totalValue = inventoryData.reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
             document.getElementById('metricValorTotal').innerText = `$${totalValue.toFixed(2)}`;
 
-            // Tasa oficial del día
-            tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || tasaDia;
+            // Tasa oficial del día (se utiliza exclusivamente la variable retenida en memoria/modificada manualmente)
             document.getElementById('metricTasaDia').innerText = tasaDia.toFixed(2);
         }
 
