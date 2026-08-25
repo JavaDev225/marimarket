@@ -96,12 +96,12 @@
                 
                 <div>
                     <label class="block text-slate-300 font-medium mb-1.5">Código / ID de Producto</label>
-                    <input type="text" id="prodId" required placeholder="Ej. PROD-006" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="prodId" required placeholder="Ej. 40" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <div>
                     <label class="block text-slate-300 font-medium mb-1.5">Descripción del Producto</label>
-                    <input type="text" id="prodDescripcion" required placeholder="Ej. Harina de Maíz Precocida 1kg" class="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" id="prodDescripcion" required placeholder="Ej. Toalla P/L 40*40CM..." class="w-full p-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <div class="grid grid-cols-3 gap-3">
@@ -117,6 +117,12 @@
                             <option value="Lts">Lts</option>
                             <option value="Caja">Caja</option>
                             <option value="Paq">Paq</option>
+                            <option value="Textil">Textil</option>
+                            <option value="Limpieza">Limpieza</option>
+                            <option value="Hogar">Hogar</option>
+                            <option value="Escolar">Escolar</option>
+                            <option value="belleza">belleza</option>
+                            <option value="Confeti">Confeti</option>
                         </select>
                     </div>
                     <div>
@@ -142,16 +148,23 @@
     <script>
         lucide.createIcons();
 
-        // Cargar inventario compartido del localStorage o valor por defecto sincronizado con el Dashboard
-        let inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [
-            { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
-            { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
-            { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
-            { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
-            { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
-        ];
+        // Detectar clave dinámica de inventario utilizada por el Dashboard
+        const STORAGE_KEY = localStorage.getItem('sys_inventory_data') ? 'sys_inventory_data' : 'sys_products_data';
+
+        // Cargar inventario del localStorage. Normaliza los nombres de propiedades (id/codigo, precio/precio_unit, etc.)
+        let rawData = JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem('sys_inventory_data') || '[]');
+        
+        let inventoryData = rawData.map(item => ({
+            id: String(item.id || item.codigo || ''),
+            descripcion: item.descripcion || item.nombre || '',
+            cantidad: Number(item.cantidad || item.stock || 0),
+            unidad: item.unidad || item.categoria || 'Und',
+            precio: Number(item.precio || item.precio_unit || item.precioUnitario || 0)
+        }));
 
         function syncStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(inventoryData));
+            // Sincroniza también en la clave alternativa para asegurar compatibilidad bidireccional
             localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
         }
 
@@ -217,7 +230,7 @@
         }
 
         function editProduct(id) {
-            const prod = inventoryData.find(p => p.id === id);
+            const prod = inventoryData.find(p => p.id === String(id));
             if (!prod) return;
 
             document.getElementById('editOriginalId').value = prod.id;
@@ -244,7 +257,7 @@
 
             if (originalId) {
                 // Modo Edición
-                const index = inventoryData.findIndex(p => p.id === originalId);
+                const index = inventoryData.findIndex(p => p.id === String(originalId));
                 if (index !== -1) {
                     inventoryData[index] = { id, descripcion, cantidad, unidad, precio };
                 }
@@ -264,14 +277,13 @@
 
         function deleteProduct(id) {
             if (confirm(`¿Estás seguro de eliminar el producto ${id}?`)) {
-                inventoryData = inventoryData.filter(p => p.id !== id);
+                inventoryData = inventoryData.filter(p => p.id !== String(id));
                 syncStorage();
                 renderTable(inventoryData);
             }
         }
 
-        // Inicializar sincronización local
-        syncStorage();
+        // Cargar y desplegar tabla inmediatamente sin sobreescribir con fallbacks
         renderTable(inventoryData);
     </script>
 </body>
