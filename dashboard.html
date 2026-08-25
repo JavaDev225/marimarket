@@ -217,29 +217,39 @@
         let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
 
         // Configuración Supabase JS Client
-        const SUPABASE_URL = "PROCESSED_BY_ENV_OR_DIRECT_CONFIG"; 
-        const SUPABASE_KEY = "PROCESSED_BY_ENV_OR_DIRECT_CONFIG";
+        const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
+        const SUPABASE_KEY = "JMXPW834.*1";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
         // Carga de inventario sincronizado desde localStorage
         async function fetchInventoryData() {
-            const storedData = localStorage.getItem('sys_inventory_data');
-            
-            if (storedData) {
-                inventoryData = JSON.parse(storedData);
-            } else {
-                // Si no existen datos guardados, se cargan los iniciales y se persisten inmediatamente
-                inventoryData = [
-                    { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
-                    { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
-                    { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
-                    { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
-                    { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
-                ];
-                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
-            }
+    try {
+        const { data, error } = await supabaseClient
+            .from('productos')
+            .select('*');
 
+        if (error) {
+            console.error('Error cargando productos de Supabase:', error);
+            return;
+        }
+
+        if (data) {
+            // Mapeamos los datos de Supabase para asegurar coherencia con los tipos
+            inventoryData = data.map(item => ({
+                id: item.id,
+                descripcion: item.descripcion,
+                cantidad: parseFloat(item.cantidad) || 0,
+                unidad: item.unidad || 'Und',
+                precio: parseFloat(item.precio) || 0
+            }));
+
+            // Actualizamos la interfaz
             renderDashboard();
         }
+    } catch (err) {
+        console.error('Error de red o conexión:', err);
+    }
+}
 
         function renderDashboard() {
             renderTable(inventoryData);
