@@ -183,39 +183,38 @@
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
         
-        // Carga de inventario sincronizado desde Supabase
+        // Carga de inventario sincronizado desde Supabase o LocalStorage
         async function fetchInventoryData() {
             try {
                 if (!supabaseClient) {
                     if (window.supabase && typeof window.supabase.createClient === 'function') {
                         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                    } else {
-                        console.error('El cliente Supabase no pudo cargarse desde el CDN.');
+                    }
+                }
+
+                if (supabaseClient) {
+                    const { data, error } = await supabaseClient
+                        .from('productos')
+                        .select('*');
+
+                    if (!error && data) {
+                        inventoryData = data.map(item => ({
+                            id: item.id !== undefined && item.id !== null ? String(item.id) : '',
+                            descripcion: item.descripcion || item.nombre || 'Sin descripción',
+                            cantidad: parseFloat(item.cantidad) || 0,
+                            unidad: item.unidad || 'General',
+                            precio: parseFloat(item.precio) || 0
+                        }));
+
+                        localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+                        renderDashboard();
                         return;
                     }
                 }
 
-                const { data, error } = await supabaseClient
-                    .from('productos')
-                    .select('*');
-
-                if (error) {
-                    console.error('Error cargando productos de Supabase:', error);
-                    return;
-                }
-
-                if (data) {
-                    inventoryData = data.map(item => ({
-                        id: item.id !== undefined && item.id !== null ? String(item.id) : '',
-                        descripcion: item.descripcion || item.nombre || 'Sin descripción',
-                        cantidad: parseFloat(item.cantidad) || 0,
-                        unidad: item.unidad || 'General',
-                        precio: parseFloat(item.precio) || 0
-                    }));
-
-                    localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
-                    renderDashboard();
-                }
+                // Fallback a LocalStorage si falla Supabase o no está conectado
+                inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
+                renderDashboard();
             } catch (err) {
                 console.error('Error de red o conexión:', err);
                 inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
@@ -228,12 +227,15 @@
         }
 
         function calculateMetrics() {
+            // Recálculo dinámico de stock bajo
             const lowStockCount = inventoryData.filter(i => i.cantidad <= 5).length;
             document.getElementById('metricStockBajo').innerText = `${lowStockCount} ítems`;
 
+            // Recálculo dinámico del Valor Total del Inventario: sum(cantidad * precio)
             const totalValue = inventoryData.reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
             document.getElementById('metricValorTotal').innerText = `$${totalValue.toFixed(2)}`;
 
+            // Tasa oficial del día
             tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || tasaDia;
             document.getElementById('metricTasaDia').innerText = tasaDia.toFixed(2);
         }
@@ -414,14 +416,12 @@
             window.location.href = '/index.html';
         }
 
-        // Sincronizar en tiempo real cuando cambia el storage en otra pestaña (ej. facturacion.html)
-        window.addEventListener('storage', (e) => {
-            if (e.key === 'sys_inventory_data' || e.key === 'sys_tasa_dia') {
-                fetchInventoryData();
-            }
+        // Sincronización en tiempo real ante cualquier modificación de storage (facturación, productos agregados/modificados)
+        window.addEventListener('storage', () => {
+            fetchInventoryData();
         });
 
-        // Recargar datos al enfocar la pestaña
+        // Recargar inventario y recalcular métricas al enfocar la pestaña del navegador
         window.addEventListener('focus', () => {
             fetchInventoryData();
         });
