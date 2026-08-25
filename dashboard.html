@@ -331,6 +331,16 @@
             if (val > 0) {
                 tasaDia = val;
                 localStorage.setItem('sys_tasa_dia', tasaDia);
+
+                // Registrar auditoría de historial de cambios de tasa
+                const historialTasas = JSON.parse(localStorage.getItem('sys_historial_tasas')) || [];
+                historialTasas.push({
+                    tasa: tasaDia,
+                    hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    fecha: new Date().toLocaleDateString()
+                });
+                localStorage.setItem('sys_historial_tasas', JSON.stringify(historialTasas));
+
                 calculateMetrics();
                 closeModal('panelEdicionModal');
             }
@@ -388,27 +398,218 @@
 
         function cerrarTurnoPDF() {
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const fecha = new Date().toLocaleString();
+            const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            
+            // Paleta Corporativa
+            const PRIMARY_COLOR = [15, 23, 42];     // Slate 900 (#0f172a)
+            const ACCENT_BLUE = [37, 99, 235];      // Blue 600 (#2563eb)
+            const ACCENT_EMERALD = [16, 185, 129];  // Emerald 500 (#10b981)
+            const LIGHT_BG = [248, 250, 252];       // Slate 50 (#f8fafc)
+            const TEXT_DARK = [30, 41, 59];         // Slate 800 (#1e293b)
+            const TEXT_MUTED = [100, 116, 139];     // Slate 500 (#64748b)
 
-            doc.setFontSize(16);
-            doc.text("COMPROBANTE DE CIERRE DE TURNO", 14, 20);
-            doc.setFontSize(10);
-            doc.text(`Fecha/Hora: ${fecha}`, 14, 28);
-            doc.text(`Tasa de Cambio Oficial: ${tasaDia.toFixed(2)} BS/USD`, 14, 34);
-            doc.line(14, 38, 196, 38);
+            const fechaHoraCierre = new Date().toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'medium' });
 
-            doc.setFontSize(12);
-            doc.text("Resumen de Inventario en Cierre:", 14, 46);
+            // Cargar Movimientos e Ingresos de Stock desde almacenamiento local
+            const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
+            const ingresosStock = JSON.parse(localStorage.getItem('sys_ingresos_stock_dia')) || JSON.parse(localStorage.getItem('sys_ingresos_stock')) || [];
+            const historialTasas = JSON.parse(localStorage.getItem('sys_historial_tasas')) || [];
 
-            let y = 54;
-            inventoryData.forEach((item) => {
-                doc.setFontSize(9);
-                doc.text(`${item.id} - ${item.descripcion} | Stock: ${item.cantidad} ${item.unidad} | $${item.precio}`, 14, y);
-                y += 6;
+            // Totales de métricas
+            let totalProductosVendidos = 0;
+            let totalVendidoUSD = 0;
+
+            movimientos.forEach(m => {
+                const listaArticulos = m.detalles || m.items || m.productos || [];
+                if (listaArticulos.length > 0) {
+                    totalProductosVendidos += listaArticulos.reduce((acc, p) => acc + (p.cantidad || 0), 0);
+                } else {
+                    totalProductosVendidos += (m.cantidad || 0);
+                }
+                totalVendidoUSD += parseFloat(m.totalUSD || m.total || 0);
             });
 
-            doc.save(`Cierre_Turno_${Date.now()}.pdf`);
+            const totalProductosIngresados = ingresosStock.reduce((acc, item) => acc + (parseFloat(item.cantidad) || 0), 0);
+            const totalVendidoVES = totalVendidoUSD * tasaDia;
+
+            // Header Principal (Banner Corporativo)
+            doc.setFillColor(...PRIMARY_COLOR);
+            doc.rect(0, 0, 210, 36, 'F');
+
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(16);
+            doc.text("MARY'S MINIMARKET DMJ", 14, 16);
+
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(203, 213, 225);
+            doc.text("COMPROBANTE Y AUDITORÍA DE CIERRE DE TURNO", 14, 23);
+            doc.text(`Fecha/Hora Emisión: ${fechaHoraCierre}`, 14, 29);
+
+            doc.setFillColor(...ACCENT_BLUE);
+            doc.rect(140, 0, 70, 36, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10);
+            doc.text("ESTADO: CERRADO", 145, 21);
+
+            let y = 46;
+
+            // Bloque 1: Resumen de Métricas Operativas
+            doc.setFillColor(...LIGHT_BG);
+            doc.roundedRect(14, y, 182, 22, 2, 2, 'F');
+            doc.setDrawColor(226, 232, 240);
+            doc.roundedRect(14, y, 182, 22, 2, 2, 'D');
+
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(...TEXT_MUTED);
+            doc.text("PRODUCTOS VENDIDOS", 20, y + 8);
+            doc.text("PRODUCTOS INGRESADOS", 80, y + 8);
+            doc.text("TASA FINAL DEL DÍA", 145, y + 8);
+
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(...TEXT_DARK);
+            doc.text(`${totalProductosVendidos} uds.`, 20, y + 17);
+            doc.text(`${totalProductosIngresados} uds.`, 80, y + 17);
+            doc.setTextColor(...ACCENT_BLUE);
+            doc.text(`${tasaDia.toFixed(2)} BS/USD`, 145, y + 17);
+
+            y += 30;
+
+            // Bloque 2: Historial / Registro de Cambios de Tasa
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(...PRIMARY_COLOR);
+            doc.text("1. Registro y Auditoría de Tasa de Cambio", 14, y);
+            y += 5;
+
+            doc.setFillColor(...PRIMARY_COLOR);
+            doc.rect(14, y, 182, 6, 'F');
+            doc.setFontSize(8);
+            doc.setTextColor(255, 255, 255);
+            doc.text("Hora de Registro", 18, y + 4.2);
+            doc.text("Tasa Establecida (BS/USD)", 100, y + 4.2);
+            doc.text("Estado", 160, y + 4.2);
+            y += 6;
+
+            if (historialTasas.length === 0) {
+                doc.setFont("helvetica", "normal");
+                doc.setTextColor(...TEXT_DARK);
+                doc.text("Sin cambios durante el turno. Tasa inicial de trabajo:", 18, y + 5);
+                doc.setFont("helvetica", "bold");
+                doc.text(`${tasaDia.toFixed(2)} BS/USD`, 100, y + 5);
+                doc.setTextColor(...ACCENT_EMERALD);
+                doc.text("Fija", 160, y + 5);
+                y += 9;
+            } else {
+                historialTasas.forEach((item, index) => {
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(...TEXT_DARK);
+                    doc.text(`${item.hora || 'Inicio de Jornada'}`, 18, y + 5);
+                    doc.text(`${parseFloat(item.tasa).toFixed(2)} BS/USD`, 100, y + 5);
+                    doc.setTextColor(...ACCENT_BLUE);
+                    doc.text(index === historialTasas.length - 1 ? "Actual / Final" : "Histórica", 160, y + 5);
+                    y += 7;
+                });
+            }
+
+            y += 6;
+
+            // Bloque 3: Detalle de Facturas Generadas
+            doc.setFontSize(11);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(...PRIMARY_COLOR);
+            doc.text("2. Detalle de Facturas Emitidas en el Turno", 14, y);
+            y += 5;
+
+            // Cabecera Tabla Facturas
+            doc.setFillColor(...PRIMARY_COLOR);
+            doc.rect(14, y, 182, 7, 'F');
+            doc.setFontSize(8);
+            doc.setTextColor(255, 255, 255);
+            doc.text("Hora / Factura", 18, y + 4.8);
+            doc.text("Cliente", 52, y + 4.8);
+            doc.text("Detalle Productos", 95, y + 4.8);
+            doc.text("Cant. Ítems", 148, y + 4.8);
+            doc.text("Total ($)", 175, y + 4.8);
+            y += 7;
+
+            if (movimientos.length === 0) {
+                doc.setFont("helvetica", "italic");
+                doc.setTextColor(...TEXT_MUTED);
+                doc.text("No se registraron ventas durante la jornada.", 18, y + 6);
+                y += 10;
+            } else {
+                movimientos.forEach((m, idx) => {
+                    if (y > 250) {
+                        doc.addPage();
+                        y = 20;
+                    }
+
+                    const bgRow = idx % 2 === 0 ? [255, 255, 255] : [241, 245, 249];
+                    const articulos = m.detalles || m.items || m.productos || [];
+                    const cantProductos = articulos.length > 0 
+                        ? articulos.reduce((a, b) => a + (b.cantidad || 0), 0)
+                        : (m.cantidad || 0);
+
+                    const resumenProds = articulos.length > 0
+                        ? articulos.map(a => `${a.descripcion || a.nombre || 'Prod'} (x${a.cantidad || 1})`).join(', ')
+                        : (m.descripcion || 'Venta de productos');
+
+                    const lineasProds = doc.splitTextToSize(resumenProds, 48);
+                    const rowHeight = Math.max(7, lineasProds.length * 4.5 + 2);
+
+                    doc.setFillColor(...bgRow);
+                    doc.rect(14, y, 182, rowHeight, 'F');
+
+                    doc.setFont("helvetica", "normal");
+                    doc.setTextColor(...TEXT_DARK);
+                    doc.setFontSize(7.5);
+                    doc.text(`${m.hora || m.fechaHora || ''}\n${m.numFactura || m.id || ''}`, 18, y + 4);
+                    doc.text(`${m.clienteNombre || m.cliente || 'Cliente General'}`, 52, y + 4);
+                    doc.text(lineasProds, 95, y + 4);
+                    doc.text(`${cantProductos}`, 154, y + 4);
+                    
+                    doc.setFont("helvetica", "bold");
+                    doc.text(`$${parseFloat(m.totalUSD || m.total || 0).toFixed(2)}`, 175, y + 4);
+
+                    y += rowHeight;
+                });
+            }
+
+            y += 8;
+            if (y > 230) {
+                doc.addPage();
+                y = 20;
+            }
+
+            // Bloque Final: Totales de Cierre
+            doc.setFillColor(...PRIMARY_COLOR);
+            doc.roundedRect(14, y, 182, 32, 2, 2, 'F');
+
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(255, 255, 255);
+            doc.text("TOTAL GENERAL VENDIDO EN TURNO", 22, y + 12);
+
+            doc.setFontSize(14);
+            doc.setTextColor(52, 211, 153); // Emerald Light
+            doc.text(`$ ${totalVendidoUSD.toFixed(2)} USD`, 22, y + 23);
+
+            doc.setFontSize(10);
+            doc.setTextColor(148, 163, 184); // Slate 400
+            doc.text("CONVERSIÓN EN BOLÍVARES (VES):", 115, y + 12);
+
+            doc.setFontSize(13);
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(96, 165, 250); // Blue Light
+            doc.text(`${totalVendidoVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} BS`, 115, y + 23);
+
+            // Descarga del documento
+            doc.save(`Cierre_Turno_MaryMinimarket_${Date.now()}.pdf`);
         }
 
         function logout() {
