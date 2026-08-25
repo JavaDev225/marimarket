@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
 
@@ -160,6 +162,17 @@
     <script>
         lucide.createIcons();
 
+        // Configuración de Supabase Client
+        const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
+        const SUPABASE_KEY = "sb_publishable_94tZU2O9IWTTufhGEavfNg_k72AHddH"; 
+        let supabaseClient = null;
+
+        function initSupabase() {
+            if (window.supabase && typeof window.supabase.createClient === 'function') {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            }
+        }
+
         // Variables de Estado
         let inventoryData = [];
         let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
@@ -167,16 +180,43 @@
         let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
         let movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
 
-        // Inicialización y Carga de Datos desde LocalStorage (Conexión Compartida con Dashboard)
-        function loadInventoryFromStorage() {
+        // Carga de Datos desde Supabase con Respaldo en LocalStorage
+        async function loadInventoryFromStorage() {
+            try {
+                if (!supabaseClient) initSupabase();
+
+                if (supabaseClient) {
+                    const { data, error } = await supabaseClient
+                        .from('productos')
+                        .select('*');
+
+                    if (!error && data) {
+                        inventoryData = data.map(item => ({
+                            id: item.id !== undefined && item.id !== null ? String(item.id) : '',
+                            descripcion: item.descripcion || item.nombre || 'Producto sin nombre',
+                            cantidad: parseFloat(item.cantidad) || 0,
+                            unidad: item.unidad || 'UND',
+                            precio: parseFloat(item.precio) || 0
+                        }));
+                        localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+                        renderProductsGrid(inventoryData);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.error("Error consultando Supabase, cargando copia local:", err);
+            }
+
+            // Fallback a LocalStorage en caso de falla de conexión
             inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
+            renderProductsGrid(inventoryData);
         }
 
-        function init() {
-            loadInventoryFromStorage();
+        async function init() {
+            initSupabase();
             tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
             document.getElementById('cartTasaDisplay').innerText = `${tasaDia.toFixed(2)} BS/USD`;
-            renderProductsGrid(inventoryData);
+            await loadInventoryFromStorage();
             renderCart();
             updateCongeladasBadge();
         }
@@ -186,7 +226,7 @@
             init();
         });
 
-        // Escuchador de cambios en tiempo real desde otras pestañas/ventanas (panel de edición o inventario)
+        // Escuchador de cambios en tiempo real desde otras pestañas/ventanas
         window.addEventListener('storage', (e) => {
             if (e.key === 'sys_inventory_data' || e.key === 'sys_tasa_dia' || e.key === 'sys_facturas_congeladas') {
                 if (e.key === 'sys_facturas_congeladas') {
@@ -457,7 +497,7 @@
         }
 
         // Procesar Factura Final y Guardar Automáticamente en Movimientos
-        function procesarFactura() {
+        async function procesarFactura() {
             const nombre = document.getElementById('clienteNombre').value.trim();
             const cedula = document.getElementById('clienteCedula').value.trim();
 
@@ -503,13 +543,24 @@
             movimientos.unshift(nuevaVenta);
             localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
 
-            // Descontar inventario
-            cart.forEach(cartItem => {
+            // Descontar inventario localmente y actualizar Supabase
+            for (const cartItem of cart) {
                 const prod = inventoryData.find(p => p.id === cartItem.id);
                 if (prod) {
                     prod.cantidad -= cartItem.cantidadCart;
+                    
+                    if (supabaseClient) {
+                        try {
+                            await supabaseClient
+                                .from('productos')
+                                .update({ cantidad: prod.cantidad })
+                                .eq('id', prod.id);
+                        } catch (err) {
+                            console.error(`Error actualizando stock de producto ${prod.id} en Supabase:`, err);
+                        }
+                    }
                 }
-            });
+            }
 
             // Guardar inventario actualizado en localStorage
             localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
