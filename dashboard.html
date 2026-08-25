@@ -213,10 +213,13 @@
                         precio: parseFloat(item.precio) || 0
                     }));
 
+                    localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
                     renderDashboard();
                 }
             } catch (err) {
                 console.error('Error de red o conexión:', err);
+                inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
+                renderDashboard();
             }
         }
 
@@ -231,12 +234,13 @@
             const totalValue = inventoryData.reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
             document.getElementById('metricValorTotal').innerText = `$${totalValue.toFixed(2)}`;
 
+            tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || tasaDia;
             document.getElementById('metricTasaDia').innerText = tasaDia.toFixed(2);
         }
 
         function renderMovimientos() {
             const container = document.getElementById('movimientosList');
-            const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
+            const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
 
             if (movimientos.length === 0) {
                 container.innerHTML = `<p class="text-slate-500 text-center py-4">Sin registro de movimientos recientes.</p>`;
@@ -247,7 +251,7 @@
             const listaReversa = [...movimientos].reverse();
 
             listaReversa.forEach(m => {
-                const listaArticulos = m.items || m.productos || [];
+                const listaArticulos = m.detalles || m.items || m.productos || [];
 
                 const totalProductos = listaArticulos.length > 0
                     ? listaArticulos.reduce((acc, p) => acc + (p.cantidad || 0), 0)
@@ -259,7 +263,7 @@
                         listaArticulos.map(p => {
                             const desc = p.descripcion || p.nombre || p.id || 'Producto';
                             const cant = p.cantidad || 1;
-                            const prec = p.precio || p.precioUnitario || 0;
+                            const prec = p.precioUnitarioUSD || p.precio || p.precioUnitario || 0;
                             return `<li class="text-[11px] text-slate-400 flex justify-between"><span>• ${desc} (x${cant})</span><span class="font-mono">$${(prec * cant).toFixed(2)}</span></li>`;
                         }).join('') +
                         `</ul>`;
@@ -272,19 +276,19 @@
                 card.innerHTML = `
                     <div class="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div class="flex items-center gap-2">
-                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${m.tipo === 'Factura Directa' || m.tipo === 'Venta Directa' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
-                                ${m.numFactura || m.id || 'FACTURA'}
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${m.tipo === 'VENTA' || m.tipo === 'Factura Directa' || m.tipo === 'Venta Directa' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}">
+                                ${m.id || m.numFactura || 'FACTURA'}
                             </span>
-                            <h4 class="font-semibold text-white text-xs">${m.cliente || 'Cliente General'}</h4>
+                            <h4 class="font-semibold text-white text-xs">${m.clienteNombre || m.cliente || 'Cliente General'}</h4>
                         </div>
-                        <span class="text-[11px] text-slate-400 font-mono">${m.fechaHora || m.fecha || ''}</span>
+                        <span class="text-[11px] text-slate-400 font-mono">${m.fechaHora || (m.fecha && m.hora ? `${m.fecha} ${m.hora}` : m.fecha) || ''}</span>
                     </div>
                     ${detalleProductosHtml}
                     <div class="flex items-center justify-between pt-1.5 text-xs">
                         <span class="text-slate-400 text-[11px]">Total ítems llevados: <strong class="text-slate-200">${totalProductos}</strong></span>
                         <div class="text-right font-mono">
-                            <span class="text-emerald-400 font-bold">$${parseFloat(m.total || m.totalUSD || 0).toFixed(2)}</span>
-                            ${(m.totalBs || m.totalBS) ? `<span class="text-slate-500 text-[10px] block">(${parseFloat(m.totalBs || m.totalBS).toFixed(2)} BS)</span>` : ''}
+                            <span class="text-emerald-400 font-bold">$${parseFloat(m.totalUSD || m.total || 0).toFixed(2)}</span>
+                            ${(m.totalBS || m.totalBs) ? `<span class="text-slate-500 text-[10px] block">(${parseFloat(m.totalBS || m.totalBs).toFixed(2)} BS)</span>` : ''}
                         </div>
                     </div>
                 `;
@@ -330,7 +334,7 @@
             }
         }
 
-        function procesarVenta() {
+        async function procesarVenta() {
             const prodId = document.getElementById('facturaProductoSelect').value;
             const cant = parseInt(document.getElementById('facturaCantidad').value);
             const prod = inventoryData.find(p => p.id === prodId);
@@ -338,19 +342,38 @@
             if (prod && prod.cantidad >= cant) {
                 prod.cantidad -= cant;
                 localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+
+                if (supabaseClient) {
+                    try {
+                        await supabaseClient
+                            .from('productos')
+                            .update({ cantidad: prod.cantidad })
+                            .eq('id', prod.id);
+                    } catch (err) {
+                        console.error("Error sincronizando actualización con Supabase:", err);
+                    }
+                }
                 
-                const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
+                const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
                 const totalUsd = prod.precio * cant;
                 const nuevoMovimiento = {
+                    id: `FAC-${Math.floor(1000 + Math.random() * 9000)}`,
                     numFactura: `FAC-${Math.floor(1000 + Math.random() * 9000)}`,
+                    clienteNombre: "Cliente Directo",
                     cliente: "Cliente Directo",
                     fechaHora: new Date().toLocaleString(),
+                    fecha: new Date().toLocaleDateString(),
+                    hora: new Date().toLocaleTimeString(),
+                    detalles: [{ id: prod.id, descripcion: prod.descripcion, cantidad: cant, precioUnitarioUSD: prod.precio }],
                     items: [{ id: prod.id, descripcion: prod.descripcion, cantidad: cant, precio: prod.precio }],
+                    totalUSD: totalUsd,
                     total: totalUsd,
+                    totalBS: totalUsd * tasaDia,
                     totalBs: totalUsd * tasaDia,
-                    tipo: "Venta Directa"
+                    tipo: "VENTA"
                 };
-                movimientos.push(nuevoMovimiento);
+                movimientos.unshift(nuevoMovimiento);
+                localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
                 localStorage.setItem('sys_movimientos_data', JSON.stringify(movimientos));
 
                 renderDashboard();
@@ -390,6 +413,18 @@
             localStorage.removeItem('sys_auth_token');
             window.location.href = '/index.html';
         }
+
+        // Sincronizar en tiempo real cuando cambia el storage en otra pestaña (ej. facturacion.html)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'sys_inventory_data' || e.key === 'sys_tasa_dia') {
+                fetchInventoryData();
+            }
+        });
+
+        // Recargar datos al enfocar la pestaña
+        window.addEventListener('focus', () => {
+            fetchInventoryData();
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             fetchInventoryData();
