@@ -8,8 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Supabase JS CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
 
@@ -144,30 +142,17 @@
     <script>
         lucide.createIcons();
 
-        // Configuración de cliente Supabase (Reemplazar con tus credenciales)
-        const SUPABASE_URL = 'https://jmxxfojwmuyqcwgbrzsv.supabase.co';
-        const SUPABASE_ANON_KEY = 'sb_publishable_94tZU2O9IWTTufhGEavfNg_k72AHddH';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Cargar inventario compartido del localStorage o valor por defecto sincronizado con el Dashboard
+        let inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [
+            { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
+            { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
+            { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
+            { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
+            { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
+        ];
 
-        let inventoryData = [];
-
-        // Obtener productos en tiempo real desde Supabase
-        async function fetchInventory() {
-            try {
-                const { data, error } = await supabase
-                    .from('productos')
-                    .select('*')
-                    .order('id', { ascending: true });
-
-                if (error) throw error;
-
-                inventoryData = data || [];
-                renderTable(inventoryData);
-            } catch (err) {
-                console.error('Error al consultar inventario en Supabase:', err.message);
-                const tbody = document.getElementById('crudTableBody');
-                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-rose-400">Error al cargar productos desde Supabase.</td></tr>`;
-            }
+        function syncStorage() {
+            localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
         }
 
         function renderTable(data) {
@@ -248,7 +233,7 @@
             document.getElementById('productModal').classList.add('flex');
         }
 
-        async function saveProduct(e) {
+        function saveProduct(e) {
             e.preventDefault();
             const originalId = document.getElementById('editOriginalId').value;
             const id = document.getElementById('prodId').value.trim();
@@ -257,49 +242,37 @@
             const unidad = document.getElementById('prodUnidad').value;
             const precio = parseFloat(document.getElementById('prodPrecio').value);
 
-            try {
-                if (originalId) {
-                    // Actualización en Supabase
-                    const { error } = await supabase
-                        .from('productos')
-                        .update({ descripcion, cantidad, unidad, precio })
-                        .eq('id', originalId);
-
-                    if (error) throw error;
-                } else {
-                    // Inserción en Supabase
-                    const { error } = await supabase
-                        .from('productos')
-                        .insert([{ id, descripcion, cantidad, unidad, precio }]);
-
-                    if (error) throw error;
+            if (originalId) {
+                // Modo Edición
+                const index = inventoryData.findIndex(p => p.id === originalId);
+                if (index !== -1) {
+                    inventoryData[index] = { id, descripcion, cantidad, unidad, precio };
                 }
-
-                await fetchInventory();
-                closeProductModal();
-            } catch (err) {
-                alert('Error al guardar el producto: ' + err.message);
+            } else {
+                // Modo Creación
+                if (inventoryData.some(p => p.id === id)) {
+                    alert('El código/ID ya existe en el inventario.');
+                    return;
+                }
+                inventoryData.push({ id, descripcion, cantidad, unidad, precio });
             }
+
+            syncStorage();
+            renderTable(inventoryData);
+            closeProductModal();
         }
 
-        async function deleteProduct(id) {
+        function deleteProduct(id) {
             if (confirm(`¿Estás seguro de eliminar el producto ${id}?`)) {
-                try {
-                    const { error } = await supabase
-                        .from('productos')
-                        .delete()
-                        .eq('id', id);
-
-                    if (error) throw error;
-                    await fetchInventory();
-                } catch (err) {
-                    alert('Error al eliminar producto: ' + err.message);
-                }
+                inventoryData = inventoryData.filter(p => p.id !== id);
+                syncStorage();
+                renderTable(inventoryData);
             }
         }
 
-        // Inicializar consulta a base de datos
-        fetchInventory();
+        // Inicializar sincronización local
+        syncStorage();
+        renderTable(inventoryData);
     </script>
 </body>
 </html>
