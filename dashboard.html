@@ -223,33 +223,33 @@
         
         // Carga de inventario sincronizado desde localStorage
         async function fetchInventoryData() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('productos')
-            .select('*');
+            try {
+                const { data, error } = await supabaseClient
+                    .from('productos')
+                    .select('*');
 
-        if (error) {
-            console.error('Error cargando productos de Supabase:', error);
-            return;
+                if (error) {
+                    console.error('Error cargando productos de Supabase:', error);
+                    return;
+                }
+
+                if (data) {
+                    // Mapeamos los datos de Supabase para asegurar coherencia con los tipos
+                    inventoryData = data.map(item => ({
+                        id: item.id,
+                        descripcion: item.descripcion,
+                        cantidad: parseFloat(item.cantidad) || 0,
+                        unidad: item.unidad || 'Und',
+                        precio: parseFloat(item.precio) || 0
+                    }));
+
+                    // Actualizamos la interfaz
+                    renderDashboard();
+                }
+            } catch (err) {
+                console.error('Error de red o conexión:', err);
+            }
         }
-
-        if (data) {
-            // Mapeamos los datos de Supabase para asegurar coherencia con los tipos
-            inventoryData = data.map(item => ({
-                id: item.id,
-                descripcion: item.descripcion,
-                cantidad: parseFloat(item.cantidad) || 0,
-                unidad: item.unidad || 'Und',
-                precio: parseFloat(item.precio) || 0
-            }));
-
-            // Actualizamos la interfaz
-            renderDashboard();
-        }
-    } catch (err) {
-        console.error('Error de red o conexión:', err);
-    }
-}
 
         function renderDashboard() {
             renderTable(inventoryData);
