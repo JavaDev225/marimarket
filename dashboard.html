@@ -218,12 +218,12 @@
 
         // Configuración Supabase JS Client
         const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
-        // Reemplazar la constante SUPABASE_KEY con la API Key pública válida (anon key) de tu proyecto de Supabase
-        const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY_AQUI";
+        // Reemplazar obligatoriamente con la API Key pública válida (anon key) de tu proyecto de Supabase
+        const SUPABASE_KEY = "sb_publishable_94tZU2O9IWTTufhGEavfNg_k72AHddH"; 
         
         // Inicialización segura de cliente Supabase
         let supabaseClient = null;
-        if (window.supabase) {
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         }
         
@@ -231,10 +231,12 @@
         async function fetchInventoryData() {
             try {
                 if (!supabaseClient) {
-                    if (window.supabase) {
+                    if (window.supabase && typeof window.supabase.createClient === 'function') {
                         supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
                     } else {
                         console.error('El cliente Supabase no pudo cargarse desde el CDN.');
+                        const tbody = document.getElementById('inventoryTableBody');
+                        if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-400">Error al cargar la librería de Supabase.</td></tr>`;
                         return;
                     }
                 }
@@ -245,14 +247,16 @@
 
                 if (error) {
                     console.error('Error cargando productos de Supabase:', error);
+                    const tbody = document.getElementById('inventoryTableBody');
+                    if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-400">Error de consulta: ${error.message}</td></tr>`;
                     return;
                 }
 
                 if (data) {
-                    // Mapeamos los datos de Supabase para asegurar coherencia con los tipos
+                    // Mapeamos los datos de Supabase asegurando la conversión limpia de campos
                     inventoryData = data.map(item => ({
-                        id: item.id,
-                        descripcion: item.descripcion,
+                        id: item.id !== undefined && item.id !== null ? String(item.id) : '',
+                        descripcion: item.descripcion || item.nombre || 'Sin descripción',
                         cantidad: parseFloat(item.cantidad) || 0,
                         unidad: item.unidad || 'Und',
                         precio: parseFloat(item.precio) || 0
@@ -263,6 +267,8 @@
                 }
             } catch (err) {
                 console.error('Error de red o conexión:', err);
+                const tbody = document.getElementById('inventoryTableBody');
+                if (tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-rose-400">Error de conexión con el servidor.</td></tr>`;
             }
         }
 
@@ -315,8 +321,8 @@
         function filterTable() {
             const query = document.getElementById('searchInput').value.toLowerCase();
             const filtered = inventoryData.filter(i => 
-                i.id.toLowerCase().includes(query) || 
-                i.descripcion.toLowerCase().includes(query)
+                (i.id && i.id.toLowerCase().includes(query)) || 
+                (i.descripcion && i.descripcion.toLowerCase().includes(query))
             );
             renderTable(filtered);
         }
