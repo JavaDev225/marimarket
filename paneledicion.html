@@ -144,17 +144,30 @@
     <script>
         lucide.createIcons();
 
-        // Cargar inventario compartido del localStorage o valor por defecto
-        let inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [
-            { id: "PROD-001", descripcion: "Harina de Trigo Todo Uso 1kg", cantidad: 45, unidad: "Kg", precio: 1.20 },
-            { id: "PROD-002", descripcion: "Aceite Vegetal Comestible 1L", cantidad: 3, unidad: "Und", precio: 2.50 },
-            { id: "PROD-003", descripcion: "Arroz Blanco Grano Largo 1kg", cantidad: 120, unidad: "Kg", precio: 1.10 },
-            { id: "PROD-004", descripcion: "Azúcar Refinada Malla 1kg", cantidad: 2, unidad: "Kg", precio: 1.35 },
-            { id: "PROD-005", descripcion: "Café Molido Gourmet 250g", cantidad: 18, unidad: "Und", precio: 3.80 }
-        ];
+        // Configuración de cliente Supabase (Reemplazar con tus credenciales)
+        const SUPABASE_URL = 'https://jmxxfojwmuyqcwgbrzsv.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_94tZU2O9IWTTufhGEavfNg_k72AHddH';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        function syncStorage() {
-            localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+        let inventoryData = [];
+
+        // Obtener productos en tiempo real desde Supabase
+        async function fetchInventory() {
+            try {
+                const { data, error } = await supabase
+                    .from('productos')
+                    .select('*')
+                    .order('id', { ascending: true });
+
+                if (error) throw error;
+
+                inventoryData = data || [];
+                renderTable(inventoryData);
+            } catch (err) {
+                console.error('Error al consultar inventario en Supabase:', err.message);
+                const tbody = document.getElementById('crudTableBody');
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-rose-400">Error al cargar productos desde Supabase.</td></tr>`;
+            }
         }
 
         function renderTable(data) {
@@ -177,7 +190,8 @@
                             ${item.cantidad}
                         </span>
                     </td>
-                    <td class="py-3.5 px-5 text-center text-slate-400">${item.unidad}</td>                     <td class="py-3.5 px-5 text-right font-mono text-emerald-400">$${parseFloat(item.precio).toFixed(2)}</td>
+                    <td class="py-3.5 px-5 text-center text-slate-400">${item.unidad}</td>
+                    <td class="py-3.5 px-5 text-right font-mono text-emerald-400">$${parseFloat(item.precio).toFixed(2)}</td>
                     <td class="py-3.5 px-5 text-center">
                         <div class="flex items-center justify-center gap-2">
                             <button onclick="editProduct('${item.id}')" class="p-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/20 transition-all" title="Editar">
@@ -234,7 +248,7 @@
             document.getElementById('productModal').classList.add('flex');
         }
 
-        function saveProduct(e) {
+        async function saveProduct(e) {
             e.preventDefault();
             const originalId = document.getElementById('editOriginalId').value;
             const id = document.getElementById('prodId').value.trim();
@@ -243,37 +257,49 @@
             const unidad = document.getElementById('prodUnidad').value;
             const precio = parseFloat(document.getElementById('prodPrecio').value);
 
-            if (originalId) {
-                // Modo Edición
-                const index = inventoryData.findIndex(p => p.id === originalId);
-                if (index !== -1) {
-                    inventoryData[index] = { id, descripcion, cantidad, unidad, precio };
-                }
-            } else {
-                // Modo Creación
-                if (inventoryData.some(p => p.id === id)) {
-                    alert('El código/ID ya existe en el inventario.');
-                    return;
-                }
-                inventoryData.push({ id, descripcion, cantidad, unidad, precio });
-            }
+            try {
+                if (originalId) {
+                    // Actualización en Supabase
+                    const { error } = await supabase
+                        .from('productos')
+                        .update({ descripcion, cantidad, unidad, precio })
+                        .eq('id', originalId);
 
-            syncStorage();
-            renderTable(inventoryData);
-            closeProductModal();
+                    if (error) throw error;
+                } else {
+                    // Inserción en Supabase
+                    const { error } = await supabase
+                        .from('productos')
+                        .insert([{ id, descripcion, cantidad, unidad, precio }]);
+
+                    if (error) throw error;
+                }
+
+                await fetchInventory();
+                closeProductModal();
+            } catch (err) {
+                alert('Error al guardar el producto: ' + err.message);
+            }
         }
 
-        function deleteProduct(id) {
+        async function deleteProduct(id) {
             if (confirm(`¿Estás seguro de eliminar el producto ${id}?`)) {
-                inventoryData = inventoryData.filter(p => p.id !== id);
-                syncStorage();
-                renderTable(inventoryData);
+                try {
+                    const { error } = await supabase
+                        .from('productos')
+                        .delete()
+                        .eq('id', id);
+
+                    if (error) throw error;
+                    await fetchInventory();
+                } catch (err) {
+                    alert('Error al eliminar producto: ' + err.message);
+                }
             }
         }
 
-        // Inicializar
-        syncStorage();
-        renderTable(inventoryData);
+        // Inicializar consulta a base de datos
+        fetchInventory();
     </script>
 </body>
 </html>
