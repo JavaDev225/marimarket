@@ -218,12 +218,27 @@
 
         // Configuración Supabase JS Client
         const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
-        const SUPABASE_KEY = "JMXPW834.*1";
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Reemplazar la constante SUPABASE_KEY con la API Key pública válida (anon key) de tu proyecto de Supabase
+        const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY_AQUI";
         
-        // Carga de inventario sincronizado desde localStorage
+        // Inicialización segura de cliente Supabase
+        let supabaseClient = null;
+        if (window.supabase) {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        }
+        
+        // Carga de inventario sincronizado desde Supabase
         async function fetchInventoryData() {
             try {
+                if (!supabaseClient) {
+                    if (window.supabase) {
+                        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                    } else {
+                        console.error('El cliente Supabase no pudo cargarse desde el CDN.');
+                        return;
+                    }
+                }
+
                 const { data, error } = await supabaseClient
                     .from('productos')
                     .select('*');
@@ -471,7 +486,9 @@
         }
 
         // Inicializar
-        fetchInventoryData();
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchInventoryData();
+        });
     </script>
 </body>
 </html>
