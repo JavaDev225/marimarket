@@ -161,14 +161,34 @@
         lucide.createIcons();
 
         // Variables de Estado
-        let inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
+        let inventoryData = [];
         let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
         let cart = [];
         let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
         let movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
 
-        // Inicialización
+        // Inicialización y Sincronización Directa con Dashboard
         function init() {
+            // Sincronización del inventario desde localStorage (sys_inventory_data)
+            const storedInventory = localStorage.getItem('sys_inventory_data');
+            
+            if (storedInventory) {
+                inventoryData = JSON.parse(storedInventory);
+            } else {
+                // Estado inicial predeterminado si aún no hay nada guardado por el dashboard
+                inventoryData = [
+                    { id: 'PROD-001', descripcion: 'Harina de Maíz Precocida 1kg', cantidad: 45, unidad: 'UND', precio: 1.10 },
+                    { id: 'PROD-002', descripcion: 'Aceite Vegetal 1L', cantidad: 20, unidad: 'UND', precio: 2.50 },
+                    { id: 'PROD-003', descripcion: 'Arroz Blanco Tipo 1 1kg', cantidad: 30, unidad: 'UND', precio: 1.00 },
+                    { id: 'PROD-004', descripcion: 'Azúcar Refinada 1kg', cantidad: 15, unidad: 'UND', precio: 1.25 },
+                    { id: 'PROD-005', descripcion: 'Café Molido Gourmet 250g', cantidad: 12, unidad: 'UND', precio: 3.20 }
+                ];
+                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+            }
+
+            // Sincronización de la tasa del día
+            tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
+
             document.getElementById('cartTasaDisplay').innerText = `${tasaDia.toFixed(2)} BS/USD`;
             renderProductsGrid(inventoryData);
             renderCart();
@@ -195,7 +215,7 @@
                         <div class="flex items-center justify-between mb-1">
                             <span class="font-mono text-[10px] text-blue-400 font-semibold">${item.id}</span>
                             <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-700/50 text-slate-300">
-                                Stock: ${item.cantidad} ${item.unidad}
+                                Stock: ${item.cantidad} ${item.unidad || 'UND'}
                             </span>
                         </div>
                         <h3 class="text-xs font-semibold text-white line-clamp-2">${item.descripcion}</h3>
@@ -241,7 +261,7 @@
                     id: prod.id,
                     descripcion: prod.descripcion,
                     precio: prod.precio,
-                    unidad: prod.unidad,
+                    unidad: prod.unidad || 'UND',
                     cantidadCart: 1,
                     maxStock: prod.cantidad
                 });
