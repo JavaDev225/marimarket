@@ -8,8 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Supabase JS Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
 
@@ -158,12 +156,9 @@
         </div>
     </div>
 
-    <!-- Core App Logic & Supabase Integration -->
+    <!-- Core App Logic -->
     <script>
-        // Configuración e Inicialización de Supabase
-        const SUPABASE_URL = 'https://jmxxfojwmuyqcwgbrzsv.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_94tZU2O9IWTTufhGEavfNg_k72AHddH';
-        const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+        lucide.createIcons();
 
         // Variables de Estado
         let inventoryData = [];
@@ -172,65 +167,31 @@
         let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
         let movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
 
-        // Inicialización y Sincronización Directa con Supabase y LocalStorage
-        async function init() {
-            lucide.createIcons();
-            
-            // 1. Obtención del Inventario (Primero desde Supabase si existe la conexión, respaldo en LocalStorage)
-            if (supabase) {
-                try {
-                    const { data: dbProducts, error } = await supabase.from('products').select('*');
-                    if (!error && dbProducts && dbProducts.length > 0) {
-                        inventoryData = dbProducts.map(p => ({
-                            id: p.code || p.id,
-                            descripcion: p.description || p.name,
-                            cantidad: p.stock,
-                            unidad: p.unit || 'UND',
-                            precio: p.price
-                        }));
-                        localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
-                    } else {
-                        loadLocalInventory();
-                    }
-                } catch (e) {
-                    console.warn('Conexión con Supabase fallida, usando almacenamiento local:', e);
-                    loadLocalInventory();
-                }
-            } else {
-                loadLocalInventory();
-            }
+        // Inicialización y Carga de Datos desde LocalStorage (Conexión Compartida con Dashboard)
+        function loadInventoryFromStorage() {
+            inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
+        }
 
-            // 2. Sincronización de la Tasa del día
+        function init() {
+            loadInventoryFromStorage();
             tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
-
             document.getElementById('cartTasaDisplay').innerText = `${tasaDia.toFixed(2)} BS/USD`;
             renderProductsGrid(inventoryData);
             renderCart();
             updateCongeladasBadge();
         }
 
-        function loadLocalInventory() {
-            const storedInventory = localStorage.getItem('sys_inventory_data');
-            if (storedInventory) {
-                inventoryData = JSON.parse(storedInventory);
-            } else {
-                inventoryData = [
-                    { id: 'PROD-001', descripcion: 'Harina de Maíz Precocida 1kg', cantidad: 45, unidad: 'UND', precio: 1.10 },
-                    { id: 'PROD-002', descripcion: 'Aceite Vegetal 1L', cantidad: 20, unidad: 'UND', precio: 2.50 },
-                    { id: 'PROD-003', descripcion: 'Arroz Blanco Tipo 1 1kg', cantidad: 30, unidad: 'UND', precio: 1.00 },
-                    { id: 'PROD-004', descripcion: 'Azúcar Refinada 1kg', cantidad: 15, unidad: 'UND', precio: 1.25 },
-                    { id: 'PROD-005', descripcion: 'Café Molido Gourmet 250g', cantidad: 12, unidad: 'UND', precio: 3.20 }
-                ];
-                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
-            }
-        }
+        // Sincronización automática si el usuario regresa a la pestaña
+        window.addEventListener('focus', () => {
+            init();
+        });
 
-        // Renderizar Catálogo (Filtrando stock > 0)
+        // Renderizar Catálogo (Filtrando estrictamente productos con existencia > 0)
         function renderProductsGrid(data) {
             const grid = document.getElementById('productsGrid');
             grid.innerHTML = '';
 
-            const disponibles = data.filter(p => p.cantidad > 0);
+            const disponibles = data.filter(p => parseFloat(p.cantidad) > 0);
 
             if (disponibles.length === 0) {
                 grid.innerHTML = `<p class="col-span-full text-center py-10 text-slate-500 text-xs">No hay productos disponibles con existencia en inventario.</p>`;
@@ -291,7 +252,7 @@
                     id: prod.id,
                     descripcion: prod.descripcion,
                     precio: prod.precio,
-                    unidad: prod.unidad || 'UND',
+                    unidad: prod.unidad,
                     cantidadCart: 1,
                     maxStock: prod.cantidad
                 });
@@ -476,7 +437,6 @@
             const modal = document.getElementById('successModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            lucide.createIcons();
         }
 
         function closeSuccessModal() {
@@ -486,8 +446,8 @@
             window.location.href = '/dashboard.html';
         }
 
-        // Procesar Factura Final, Guardar en Supabase y Sincronizar LocalStorage
-        async function procesarFactura() {
+        // Procesar Factura Final y Guardar Automáticamente en Movimientos
+        function procesarFactura() {
             const nombre = document.getElementById('clienteNombre').value.trim();
             const cedula = document.getElementById('clienteCedula').value.trim();
 
@@ -506,7 +466,7 @@
             const totalUSD = cart.reduce((acc, i) => acc + (i.precio * i.cantidadCart), 0);
             const totalBS = totalUSD * tasaDia;
 
-            // Estructura normalizada de la venta
+            // Estructura normalizada de la venta para ser leída por movimientos.html
             const nuevaVenta = {
                 id: `FAC-${Date.now()}`,
                 tipo: 'VENTA',
@@ -528,45 +488,20 @@
                 }))
             };
 
-            // 1. Inserción Remota en Supabase
-            if (supabase) {
-                try {
-                    await supabase.from('sales').insert([{
-                        invoice_id: nuevaVenta.id,
-                        client_name: nombre,
-                        client_id: cedula,
-                        total_usd: totalUSD,
-                        total_bs: totalBS,
-                        exchange_rate: tasaDia,
-                        items: nuevaVenta.detalles,
-                        created_at: now.toISOString()
-                    }]);
-                } catch (e) {
-                    console.warn('Error al registrar venta en Supabase:', e);
-                }
-            }
-
-            // 2. Actualización Local y Persistente en LocalStorage
+            // Lectura, actualización y guardado persistente en LocalStorage
             let movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
             movimientos.unshift(nuevaVenta);
             localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
 
-            // 3. Descontar Inventario local y remoto
-            for (const cartItem of cart) {
+            // Descontar inventario
+            cart.forEach(cartItem => {
                 const prod = inventoryData.find(p => p.id === cartItem.id);
                 if (prod) {
                     prod.cantidad -= cartItem.cantidadCart;
-                    if (supabase) {
-                        try {
-                            await supabase.from('products').update({ stock: prod.cantidad }).eq('code', prod.id);
-                        } catch (e) {
-                            console.warn(`Error al actualizar stock de ${prod.id} en Supabase:`, e);
-                        }
-                    }
                 }
-            }
+            });
 
-            // Guardar inventario actualizado localmente
+            // Guardar inventario actualizado en localStorage
             localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
 
             // Limpiar Carrito y Formulario
@@ -576,12 +511,12 @@
             renderCart();
             renderProductsGrid(inventoryData);
 
-            // Mostrar Modal de Éxito
+            // Mostrar Mensaje Atractivo (Custom Modal)
             showSuccessModal();
         }
 
-        // Ejecutar inicialización al cargar la ventana
-        window.addEventListener('DOMContentLoaded', init);
+        // Ejecutar inicialización al cargar
+        init();
     </script>
 </body>
 </html>
