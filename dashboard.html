@@ -109,13 +109,13 @@
 
         </section>
 
-        <!-- Tabla de Inventario Principal -->
+        <!-- Tabla de Inventario Principal con Filtro por Secciones/Categorías -->
         <section class="bg-slate-800/80 border border-slate-700/60 rounded-2xl shadow-xl overflow-hidden backdrop-blur-md">
             
             <div class="p-5 border-b border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 class="text-lg font-bold text-white">Inventario General</h2>
-                    <p class="text-xs text-slate-400 mt-0.5">Vista detallada de existencias e identificadores de catálogo</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Vista organizada por secciones y existencias de catálogo</p>
                 </div>
                 <div class="relative w-full sm:w-64">
                     <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
@@ -129,6 +129,13 @@
                 </div>
             </div>
 
+            <!-- Barra Nav de Categorías / Secciones -->
+            <div class="px-5 pt-3 pb-1 bg-slate-900/40 border-b border-slate-700/60">
+                <div id="categoryTabs" class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+                    <!-- Dinámico vía JS -->
+                </div>
+            </div>
+
             <!-- Table Wrapper -->
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm text-slate-300">
@@ -137,7 +144,7 @@
                             <th class="py-3.5 px-5">ID / Código</th>
                             <th class="py-3.5 px-5">Descripción</th>
                             <th class="py-3.5 px-5 text-center">Cantidad</th>
-                            <th class="py-3.5 px-5 text-center">Unidad</th>
+                            <th class="py-3.5 px-5 text-center">Sección / Unidad</th>
                             <th class="py-3.5 px-5 text-right">Precio Unit. ($)</th>
                         </tr>
                     </thead>
@@ -214,14 +221,13 @@
 
         // Variables de Estado
         let inventoryData = [];
+        let selectedCategory = 'Todas';
         let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
 
         // Configuración Supabase JS Client
         const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
-        // Reemplazar obligatoriamente con la API Key pública válida (anon key) de tu proyecto de Supabase
         const SUPABASE_KEY = "sb_publishable_94tZU2O9IWTTufhGEavfNg_k72AHddH"; 
         
-        // Inicialización segura de cliente Supabase
         let supabaseClient = null;
         if (window.supabase && typeof window.supabase.createClient === 'function') {
             supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -253,16 +259,15 @@
                 }
 
                 if (data) {
-                    // Mapeamos los datos de Supabase asegurando la conversión limpia de campos
                     inventoryData = data.map(item => ({
                         id: item.id !== undefined && item.id !== null ? String(item.id) : '',
                         descripcion: item.descripcion || item.nombre || 'Sin descripción',
                         cantidad: parseFloat(item.cantidad) || 0,
-                        unidad: item.unidad || 'Und',
+                        unidad: item.unidad || 'General',
                         precio: parseFloat(item.precio) || 0
                     }));
 
-                    // Actualizamos la interfaz
+                    renderCategoryTabs();
                     renderDashboard();
                 }
             } catch (err) {
@@ -272,8 +277,37 @@
             }
         }
 
+        function renderCategoryTabs() {
+            const tabsContainer = document.getElementById('categoryTabs');
+            if (!tabsContainer) return;
+
+            // Extraemos secciones/unidades únicas respetando minúsculas/mayúsculas
+            const categories = ['Todas', ...new Set(inventoryData.map(item => item.unidad).filter(Boolean))];
+
+            tabsContainer.innerHTML = categories.map(cat => {
+                const isActive = cat === selectedCategory;
+                return `
+                    <button 
+                        onclick="setCategory('${cat}')" 
+                        class="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                            isActive 
+                                ? 'bg-blue-600 border-blue-500 text-white shadow-md shadow-blue-600/20' 
+                                : 'bg-slate-800/80 border-slate-700/60 text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                        }">
+                        ${cat}
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function setCategory(cat) {
+            selectedCategory = cat;
+            renderCategoryTabs();
+            filterTable();
+        }
+
         function renderDashboard() {
-            renderTable(inventoryData);
+            filterTable();
             calculateMetrics();
         }
 
@@ -282,7 +316,7 @@
             tbody.innerHTML = '';
 
             if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-slate-500">No se encontraron productos.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-slate-500">No se encontraron productos en esta sección.</td></tr>`;
                 return;
             }
 
@@ -298,7 +332,11 @@
                             ${item.cantidad}
                         </span>
                     </td>
-                    <td class="py-3 px-5 text-center text-slate-400">${item.unidad}</td>
+                    <td class="py-3 px-5 text-center">
+                        <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[11px]">
+                            ${item.unidad}
+                        </span>
+                    </td>
                     <td class="py-3 px-5 text-right font-mono text-emerald-400">$${parseFloat(item.precio).toFixed(2)}</td>
                 `;
                 tbody.appendChild(row);
@@ -306,28 +344,26 @@
         }
 
         function calculateMetrics() {
-            // Stock Bajo
             const lowStockCount = inventoryData.filter(i => i.cantidad <= 5).length;
             document.getElementById('metricStockBajo').innerText = `${lowStockCount} ítems`;
 
-            // Valor total
             const totalValue = inventoryData.reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
             document.getElementById('metricValorTotal').innerText = `$${totalValue.toFixed(2)}`;
 
-            // Tasa del día
             document.getElementById('metricTasaDia').innerText = tasaDia.toFixed(2);
         }
 
         function filterTable() {
             const query = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = inventoryData.filter(i => 
-                (i.id && i.id.toLowerCase().includes(query)) || 
-                (i.descripcion && i.descripcion.toLowerCase().includes(query))
-            );
+            const filtered = inventoryData.filter(i => {
+                const matchesCategory = selectedCategory === 'Todas' || i.unidad === selectedCategory;
+                const matchesQuery = (i.id && i.id.toLowerCase().includes(query)) || 
+                                     (i.descripcion && i.descripcion.toLowerCase().includes(query));
+                return matchesCategory && matchesQuery;
+            });
             renderTable(filtered);
         }
 
-        // Renderizado e Historial de Movimientos del Día
         function renderMovimientos() {
             const container = document.getElementById('movimientosList');
             const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
@@ -338,12 +374,9 @@
             }
 
             container.innerHTML = '';
-            
-            // Copia invertida para mantener inmutable el array original
             const listaReversa = [...movimientos].reverse();
 
             listaReversa.forEach(m => {
-                // Compatibilidad de estructura: Soporta 'items' (de facturacion.html) o 'productos'
                 const listaArticulos = m.items || m.productos || [];
 
                 const totalProductos = listaArticulos.length > 0
@@ -389,7 +422,6 @@
             });
         }
 
-        // Modales Control
         function openFacturarModal() {
             const select = document.getElementById('facturaProductoSelect');
             select.innerHTML = '';
@@ -437,7 +469,6 @@
                 prod.cantidad -= cant;
                 localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
                 
-                // Registrar Movimiento de Venta Local
                 const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
                 const totalUsd = prod.precio * cant;
                 const nuevoMovimiento = {
@@ -460,7 +491,6 @@
             }
         }
 
-        // Generar Cierre de Turno en PDF
         function cerrarTurnoPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
@@ -477,7 +507,7 @@
             doc.text("Resumen de Inventario en Cierre:", 14, 46);
 
             let y = 54;
-            inventoryData.forEach((item, index) => {
+            inventoryData.forEach((item) => {
                 doc.setFontSize(9);
                 doc.text(`${item.id} - ${item.descripcion} | Stock: ${item.cantidad} ${item.unidad} | $${item.precio}`, 14, y);
                 y += 6;
@@ -491,7 +521,6 @@
             window.location.href = '/index.html';
         }
 
-        // Inicializar
         document.addEventListener('DOMContentLoaded', () => {
             fetchInventoryData();
         });
