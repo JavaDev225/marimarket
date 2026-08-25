@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="h-full flex flex-col font-sans antialiased text-slate-100 bg-slate-900">
 
@@ -160,34 +162,59 @@
     <script>
         lucide.createIcons();
 
+        // Configuración e Inicialización de Supabase
+        const SUPABASE_URL = 'TU_SUPABASE_URL';
+        const SUPABASE_KEY = 'TU_SUPABASE_ANON_KEY';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
         // Variables de Estado
         let inventoryData = [];
-        let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
+        let tasaDia = 36.50;
         let cart = [];
         let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
-        let movimientosDia = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
+        let movimientosDia = [];
 
-        // Inicialización y Sincronización Directa con Dashboard
-        function init() {
-            // Sincronización del inventario desde localStorage (sys_inventory_data)
-            const storedInventory = localStorage.getItem('sys_inventory_data');
-            
-            if (storedInventory) {
-                inventoryData = JSON.parse(storedInventory);
-            } else {
-                // Estado inicial predeterminado si aún no hay nada guardado por el dashboard
-                inventoryData = [
-                    { id: 'PROD-001', descripcion: 'Harina de Maíz Precocida 1kg', cantidad: 45, unidad: 'UND', precio: 1.10 },
-                    { id: 'PROD-002', descripcion: 'Aceite Vegetal 1L', cantidad: 20, unidad: 'UND', precio: 2.50 },
-                    { id: 'PROD-003', descripcion: 'Arroz Blanco Tipo 1 1kg', cantidad: 30, unidad: 'UND', precio: 1.00 },
-                    { id: 'PROD-004', descripcion: 'Azúcar Refinada 1kg', cantidad: 15, unidad: 'UND', precio: 1.25 },
-                    { id: 'PROD-005', descripcion: 'Café Molido Gourmet 250g', cantidad: 12, unidad: 'UND', precio: 3.20 }
-                ];
-                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+        // Inicialización y Sincronización Directa con Supabase
+        async function init() {
+            try {
+                // 1. Obtener Inventario desde Supabase
+                const { data: inventario, error: errInv } = await supabase
+                    .from('inventario')
+                    .select('*');
+
+                if (errInv) throw errInv;
+
+                if (inventario && inventario.length > 0) {
+                    inventoryData = inventario;
+                } else {
+                    inventoryData = [
+                        { id: 'PROD-001', descripcion: 'Harina de Maíz Precocida 1kg', cantidad: 45, unidad: 'UND', precio: 1.10 },
+                        { id: 'PROD-002', descripcion: 'Aceite Vegetal 1L', cantidad: 20, unidad: 'UND', precio: 2.50 },
+                        { id: 'PROD-003', descripcion: 'Arroz Blanco Tipo 1 1kg', cantidad: 30, unidad: 'UND', precio: 1.00 },
+                        { id: 'PROD-004', descripcion: 'Azúcar Refinada 1kg', cantidad: 15, unidad: 'UND', precio: 1.25 },
+                        { id: 'PROD-005', descripcion: 'Café Molido Gourmet 250g', cantidad: 12, unidad: 'UND', precio: 3.20 }
+                    ];
+                }
+
+                // 2. Obtener Tasa del Día desde Supabase
+                const { data: configTasa, error: errTasa } = await supabase
+                    .from('configuraciones')
+                    .select('valor')
+                    .eq('clave', 'tasa_dia')
+                    .single();
+
+                if (!errTasa && configTasa) {
+                    tasaDia = parseFloat(configTasa.valor) || 36.50;
+                } else {
+                    tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
+                }
+
+            } catch (err) {
+                console.error('Error al sincronizar con Supabase, usando respaldo local:', err);
+                const storedInventory = localStorage.getItem('sys_inventory_data');
+                if (storedInventory) inventoryData = JSON.parse(storedInventory);
+                tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
             }
-
-            // Sincronización de la tasa del día
-            tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
 
             document.getElementById('cartTasaDisplay').innerText = `${tasaDia.toFixed(2)} BS/USD`;
             renderProductsGrid(inventoryData);
@@ -455,8 +482,8 @@
             window.location.href = '/dashboard.html';
         }
 
-        // Procesar Factura Final y Guardar Automáticamente en Movimientos
-        function procesarFactura() {
+        // Procesar Factura Final y Guardar Directamente en Supabase
+        async function procesarFactura() {
             const nombre = document.getElementById('clienteNombre').value.trim();
             const cedula = document.getElementById('clienteCedula').value.trim();
 
@@ -475,7 +502,6 @@
             const totalUSD = cart.reduce((acc, i) => acc + (i.precio * i.cantidadCart), 0);
             const totalBS = totalUSD * tasaDia;
 
-            // Estructura normalizada de la venta para ser leída por movimientos.html
             const nuevaVenta = {
                 id: `FAC-${Date.now()}`,
                 tipo: 'VENTA',
@@ -497,21 +523,47 @@
                 }))
             };
 
-            // Lectura, actualización y guardado persistente en LocalStorage
-            let movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
-            movimientos.unshift(nuevaVenta);
-            localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
+            try {
+                // 1. Guardar la venta en Supabase (tabla movimientos)
+                const { error: errVenta } = await supabase
+                    .from('movimientos')
+                    .insert([nuevaVenta]);
 
-            // Descontar inventario
-            cart.forEach(cartItem => {
-                const prod = inventoryData.find(p => p.id === cartItem.id);
-                if (prod) {
-                    prod.cantidad -= cartItem.cantidadCart;
+                if (errVenta) throw errVenta;
+
+                // 2. Descontar stock e invocar la actualización en Supabase
+                for (const cartItem of cart) {
+                    const prod = inventoryData.find(p => p.id === cartItem.id);
+                    if (prod) {
+                        const nuevoStock = prod.cantidad - cartItem.cantidadCart;
+                        prod.cantidad = nuevoStock;
+
+                        await supabase
+                            .from('inventario')
+                            .update({ cantidad: nuevoStock })
+                            .eq('id', cartItem.id);
+                    }
                 }
-            });
 
-            // Guardar inventario actualizado en localStorage
-            localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+                // Respaldo en LocalStorage por sincronización local
+                let movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
+                movimientos.unshift(nuevaVenta);
+                localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
+                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+
+            } catch (err) {
+                console.error('Error procesando venta en Supabase, guardando localmente:', err);
+                
+                let movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || [];
+                movimientos.unshift(nuevaVenta);
+                localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientos));
+
+                cart.forEach(cartItem => {
+                    const prod = inventoryData.find(p => p.id === cartItem.id);
+                    if (prod) prod.cantidad -= cartItem.cantidadCart;
+                });
+                localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
+            }
 
             // Limpiar Carrito y Formulario
             cart = [];
