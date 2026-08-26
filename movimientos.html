@@ -83,33 +83,49 @@
 
         let movimientosData = [];
 
-        // Función auxiliar para parsear timestamps de forma robusta
+        // Función auxiliar corregida para determinar la antigüedad exacta del registro
         function obtenerTimestampMovimiento(mov) {
+            // Prioridad 1: Timestamp numérico directo
             if (mov.timestamp && !isNaN(mov.timestamp)) {
                 return Number(mov.timestamp);
             }
             
+            // Prioridad 2: Extraer timestamp si el ID contiene un timestamp de JS (Ej: FAC-1724000000000)
+            const idClave = String(mov.numFactura || mov.id || '');
+            if (idClave.includes('-')) {
+                const posibleTs = Number(idClave.split('-')[1]);
+                if (!isNaN(posibleTs) && posibleTs > 1600000000000) {
+                    return posibleTs;
+                }
+            }
+
             const fechaStr = mov.fechaHora || mov.fecha || '';
-            if (!fechaStr) return new Date().getTime(); // Si no hay fecha, resguarda la factura activa
+            if (!fechaStr) return Date.now();
 
-            // Intento de parseo directo ISO o estándar
+            // Intento de parseo de formato ISO o estándar
             let fechaParsed = new Date(fechaStr).getTime();
-            if (!isNaN(fechaParsed)) return fechaParsed;
+            if (!isNaN(fechaParsed) && fechaParsed > 0) return fechaParsed;
 
-            // Soporte para formatos dd/mm/yyyy o dd-mm-yyyy
-            const partes = fechaStr.split(/[\/\-]/);
+            // Soporte seguro para formatos dd/mm/yyyy o dd-mm-yyyy con hora opcional
+            const soloFecha = fechaStr.split(' ')[0];
+            const partes = soloFecha.split(/[\/\-]/);
             if (partes.length === 3) {
                 const dia = parseInt(partes[0], 10);
                 const mes = parseInt(partes[1], 10) - 1;
                 const anio = parseInt(partes[2], 10);
-                fechaParsed = new Date(anio, mes, dia).getTime();
-                if (!isNaN(fechaParsed)) return fechaParsed;
+                
+                // Si el año viene en 2 dígitos, normalizar a 4
+                const anioFull = anio < 100 ? 2000 + anio : anio;
+                
+                const d = new Date(anioFull, mes, dia);
+                if (!isNaN(d.getTime())) return d.getTime();
             }
 
-            return new Date().getTime();
+            // Resguardo de seguridad: Si no se puede determinar la fecha, no expurgar por error
+            return Date.now();
         }
 
-        // 1. Carga, Depuración de >7 Días y Renderizado (Sincronizado con sys_movimientos_dia)
+        // 1. Carga, Depuración de >7 Días y Renderizado
         function cargarYLimpiarMovimientos() {
             const rawDia = localStorage.getItem('sys_movimientos_dia');
             const rawData = localStorage.getItem('sys_movimientos_data');
@@ -124,7 +140,6 @@
                 if (idClave) {
                     mapaUnico.set(idClave, mov);
                 } else {
-                    // Si no posee id estricto, resguarda por clave aleatoria temporal
                     mapaUnico.set(JSON.stringify(mov), mov);
                 }
             });
@@ -133,18 +148,18 @@
 
             const UN_DIA_MS = 24 * 60 * 60 * 1000;
             const SIETE_DIAS_MS = 7 * UN_DIA_MS;
-            const ahora = new Date().getTime();
+            const ahora = Date.now();
 
-            // Filtrado de retención: mantiene registros creados en los últimos 7 días exactos
+            // Filtrado de retención: elimina ÚNICAMENTE registros con más de 7 días (604,800,000 ms)
             const movimientosValidos = movimientosUnicos.filter(mov => {
                 const fechaMov = obtenerTimestampMovimiento(mov);
                 const diferenciaMs = ahora - fechaMov;
 
-                // Mantiene facturas si la diferencia es <= 7 días (evita purgas tempranas)
+                // Si la fecha del movimiento es futura o tiene <= 7 días de antigüedad, se conserva
                 return diferenciaMs <= SIETE_DIAS_MS;
             });
 
-            // Guardar consistencia de datos depurados e unificados en LocalStorage
+            // Guardar consistencia de datos depurados en LocalStorage
             localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientosValidos));
             localStorage.setItem('sys_movimientos_data', JSON.stringify(movimientosValidos));
 
@@ -175,7 +190,6 @@
 
             listaOrdenada.forEach((mov, index) => {
                 const idDesplegable = `detalle-${index}`;
-                // Adaptación de propiedades compatibles entre facturacion.html y movimientos.html
                 const items = mov.detalles || mov.items || mov.productos || [];
                 const numFac = mov.numFactura || mov.id || `FAC-${index + 1}`;
                 const clienteNombre = mov.clienteNombre || mov.cliente || "Cliente General";
