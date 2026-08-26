@@ -131,7 +131,7 @@
         <!-- Catálogo de Productos Disponibles (8 Cols) -->
         <section class="lg:col-span-7 xl:col-span-8 space-y-4">
             
-            <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 backdrop-blur-md shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 backdrop-blur-md shadow-xl flex flex-col gap-3">
                 <div class="relative w-full">
                     <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
                     <input 
@@ -142,10 +142,15 @@
                         class="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                     >
                 </div>
+
+                <!-- Abecedario Interactivo por Pestañas -->
+                <div id="alphabetNav" class="flex flex-wrap gap-1 pt-2 border-t border-slate-700/40 text-xs font-semibold">
+                    <!-- Se genera dinámicamente con JS -->
+                </div>
             </div>
 
             <!-- Grid de Catálogo -->
-            <div id="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+            <div id="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 pr-1">
                 <!-- Carga dinámica -->
             </div>
 
@@ -243,6 +248,7 @@
 
         // Variables de Estado
         let inventoryData = [];
+        let currentLetter = 'A';
         let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
         let cart = [];
         let congeladas = JSON.parse(localStorage.getItem('sys_facturas_congeladas')) || [];
@@ -332,8 +338,10 @@
                             unidad: item.unidad || 'UND',
                             precio: parseFloat(item.precio) || 0
                         }));
+                        inventoryData.sort((a, b) => a.descripcion.localeCompare(b.descripcion, 'es', { sensitivity: 'base' }));
                         localStorage.setItem('sys_inventory_data', JSON.stringify(inventoryData));
-                        renderProductsGrid(inventoryData);
+                        renderAlphabetNav();
+                        renderProductsGrid();
                         return;
                     }
                 }
@@ -343,7 +351,9 @@
 
             // Fallback a LocalStorage en caso de falla de conexión
             inventoryData = JSON.parse(localStorage.getItem('sys_inventory_data')) || [];
-            renderProductsGrid(inventoryData);
+            inventoryData.sort((a, b) => a.descripcion.localeCompare(b.descripcion, 'es', { sensitivity: 'base' }));
+            renderAlphabetNav();
+            renderProductsGrid();
         }
 
         async function init() {
@@ -370,15 +380,55 @@
             }
         });
 
-        // Renderizar Catálogo (Filtrando strictly productos con existencia > 0)
-        function renderProductsGrid(data) {
+        function renderAlphabetNav() {
+            const nav = document.getElementById('alphabetNav');
+            const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#".split('');
+            nav.innerHTML = '';
+
+            letters.forEach(letter => {
+                const button = document.createElement('button');
+                button.textContent = letter;
+                button.onclick = () => selectLetter(letter);
+                
+                if (letter === currentLetter) {
+                    button.className = "px-2 py-0.5 rounded-lg bg-blue-600 text-white font-bold border border-blue-500 transition-all text-center min-w-[28px]";
+                } else {
+                    button.className = "px-2 py-0.5 rounded-lg bg-slate-900/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition-all text-center min-w-[28px]";
+                }
+                
+                nav.appendChild(button);
+            });
+        }
+
+        function selectLetter(letter) {
+            currentLetter = letter;
+            document.getElementById('searchInput').value = ''; // Limpiar búsqueda al cambiar de letra
+            renderAlphabetNav();
+            renderProductsGrid();
+        }
+
+        // Renderizar Catálogo (Filtrando strictly productos con existencia > 0 y según letra seleccionada)
+        function renderProductsGrid(filteredData = null) {
             const grid = document.getElementById('productsGrid');
             grid.innerHTML = '';
 
-            const disponibles = data.filter(p => parseFloat(p.cantidad) > 0);
+            const query = document.getElementById('searchInput').value.trim();
+            let disponibles = inventoryData.filter(p => parseFloat(p.cantidad) > 0);
+
+            if (query !== '') {
+                disponibles = filteredData ? filteredData.filter(p => parseFloat(p.cantidad) > 0) : [];
+            } else {
+                disponibles = disponibles.filter(item => {
+                    const firstChar = item.descripcion.trim().charAt(0).toUpperCase();
+                    const letter = /[A-Z]/.test(firstChar) ? firstChar : '#';
+                    return letter === currentLetter;
+                });
+            }
+
+            const sectionTitle = query !== '' ? `Búsqueda` : `Sección ${currentLetter}`;
 
             if (disponibles.length === 0) {
-                grid.innerHTML = `<p class="col-span-full text-center py-10 text-slate-500 text-xs">No hay productos disponibles con existencia en inventario.</p>`;
+                grid.innerHTML = `<p class="col-span-full text-center py-10 text-slate-500 text-xs">No hay productos disponibles con existencia en la <strong class="text-slate-300">${sectionTitle}</strong>.</p>`;
                 return;
             }
 
@@ -414,7 +464,11 @@
 
         // Filtrar productos mediante barra de búsqueda
         function filterProducts() {
-            const query = document.getElementById('searchInput').value.toLowerCase();
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            if (query === '') {
+                renderProductsGrid();
+                return;
+            }
             const filtered = inventoryData.filter(i => 
                 i.id.toLowerCase().includes(query) || 
                 i.descripcion.toLowerCase().includes(query)
@@ -785,7 +839,7 @@
             document.getElementById('clienteNombre').value = '';
             document.getElementById('clienteCedula').value = '';
             renderCart();
-            renderProductsGrid(inventoryData);
+            renderProductsGrid();
 
             // Mostrar Mensaje Atractivo (Custom Modal)
             showSuccessModal();
