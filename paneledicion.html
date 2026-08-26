@@ -149,7 +149,11 @@
                     }
                 }
 
-                const { data, error } = await supabaseClient.from('productos').select('*');
+                // Consulta con orden ascendente por ID directo a Supabase
+                const { data, error } = await supabaseClient
+                    .from('productos')
+                    .select('*')
+                    .order('id', { ascending: true });
 
                 if (error) {
                     showTableError(`Error al consultar: ${error.message}`);
@@ -163,6 +167,9 @@
                     unidad: item.unidad || 'Und',
                     precio: parseFloat(item.precio) || 0
                 }));
+
+                // Garantizar el orden numérico secuencial en el cliente
+                inventoryData.sort((a, b) => Number(a.id) - Number(b.id));
 
                 renderTable(inventoryData);
             } catch (err) {
