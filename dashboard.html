@@ -172,7 +172,12 @@
         // Variables de Estado
         let inventoryData = [];
         let selectedCategory = 'Todas';
-        let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia')) || 36.50;
+
+        // Garantizar persistencia estricta de la Tasa del Día sin sobrescrituras automáticas
+        if (localStorage.getItem('sys_tasa_dia') === null) {
+            localStorage.setItem('sys_tasa_dia', '36.50');
+        }
+        let tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia'));
 
         // Configuración Supabase JS Client
         const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
@@ -235,7 +240,8 @@
             const totalValue = inventoryData.reduce((acc, item) => acc + (item.cantidad * item.precio), 0);
             document.getElementById('metricValorTotal').innerText = `$${totalValue.toFixed(2)}`;
 
-            // Tasa oficial del día (se utiliza exclusivamente la variable retenida en memoria/modificada manualmente)
+            // Tasa oficial del día (Lectura directa desde estado persistido sin fallback destructivo)
+            tasaDia = parseFloat(localStorage.getItem('sys_tasa_dia'));
             document.getElementById('metricTasaDia').innerText = tasaDia.toFixed(2);
         }
 
@@ -329,7 +335,7 @@
             const val = parseFloat(document.getElementById('inputTasa').value);
             if (val > 0) {
                 tasaDia = val;
-                localStorage.setItem('sys_tasa_dia', tasaDia);
+                localStorage.setItem('sys_tasa_dia', tasaDia.toString());
 
                 // Registrar auditoría de historial de cambios de tasa
                 const historialTasas = JSON.parse(localStorage.getItem('sys_historial_tasas')) || [];
