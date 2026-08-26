@@ -115,19 +115,29 @@
             const rawDia = localStorage.getItem('sys_movimientos_dia');
             const rawData = localStorage.getItem('sys_movimientos_data');
             
-            let movimientos = [];
-            if (rawDia) {
-                movimientos = JSON.parse(rawDia);
-            } else if (rawData) {
-                movimientos = JSON.parse(rawData);
-            }
+            const listDia = rawDia ? JSON.parse(rawDia) : [];
+            const listData = rawData ? JSON.parse(rawData) : [];
+
+            // Unificar listas y desduplicar por id o número de factura
+            const mapaUnico = new Map();
+            [...listDia, ...listData].forEach(mov => {
+                const idClave = mov.numFactura || mov.id;
+                if (idClave) {
+                    mapaUnico.set(idClave, mov);
+                } else {
+                    // Si no posee id estricto, resguarda por clave aleatoria temporal
+                    mapaUnico.set(JSON.stringify(mov), mov);
+                }
+            });
+
+            const movimientosUnicos = Array.from(mapaUnico.values());
 
             const UN_DIA_MS = 24 * 60 * 60 * 1000;
             const SIETE_DIAS_MS = 7 * UN_DIA_MS;
             const ahora = new Date().getTime();
 
             // Filtrado de retención: mantiene registros creados en los últimos 7 días exactos
-            const movimientosValidos = movimientos.filter(mov => {
+            const movimientosValidos = movimientosUnicos.filter(mov => {
                 const fechaMov = obtenerTimestampMovimiento(mov);
                 const diferenciaMs = ahora - fechaMov;
 
@@ -135,7 +145,7 @@
                 return diferenciaMs <= SIETE_DIAS_MS;
             });
 
-            // Guardar consistencia de datos en LocalStorage
+            // Guardar consistencia de datos depurados e unificados en LocalStorage
             localStorage.setItem('sys_movimientos_dia', JSON.stringify(movimientosValidos));
             localStorage.setItem('sys_movimientos_data', JSON.stringify(movimientosValidos));
 
