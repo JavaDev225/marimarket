@@ -34,6 +34,20 @@
         </div>
     </div>
 
+    <!-- Modal Notificación: Factura Congelada Con Éxito (MENSAJE DE SISTEMA) -->
+    <div id="freezeSuccessModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-[100] p-4 transition-all">
+        <div class="bg-slate-800 border border-amber-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl shadow-amber-500/10 flex flex-col items-center text-center transform scale-95 transition-all duration-200">
+            <div class="w-16 h-16 bg-amber-500/20 border border-amber-500/30 rounded-full flex items-center justify-center text-amber-400 mb-4 animate-pulse">
+                <i data-lucide="snowflake" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-xl font-black text-white tracking-wide uppercase mb-1">FACTURA CONGELADA</h3>
+            <p class="text-xs text-slate-400 mb-6">La factura ha sido guardada en pausa con éxito. Puedes recuperarla en cualquier momento desde el menú superior.</p>
+            <button onclick="closeFreezeSuccessModal()" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
+                <span>Aceptar</span>
+            </button>
+        </div>
+    </div>
+
     <!-- Modal del Sistema: Ingreso de Peso / Cantidad Decimal -->
     <div id="weightModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-[110] p-4 transition-all">
         <div class="bg-slate-800 border border-slate-700/80 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
@@ -343,7 +357,7 @@
             }
         });
 
-        // Renderizar Catálogo (Filtrando estrictamente productos con existencia > 0)
+        // Renderizar Catálogo (Filtrando strictly productos con existencia > 0)
         function renderProductsGrid(data) {
             const grid = document.getElementById('productsGrid');
             grid.innerHTML = '';
@@ -569,7 +583,20 @@
             renderCart();
             updateCongeladasBadge();
 
-            alert('Factura congelada y guardada en pausa con éxito.');
+            // Mostrar Mensaje de Confirmación con Modal del Sistema
+            showFreezeSuccessModal();
+        }
+
+        function showFreezeSuccessModal() {
+            const modal = document.getElementById('freezeSuccessModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeFreezeSuccessModal() {
+            const modal = document.getElementById('freezeSuccessModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
         }
 
         function updateCongeladasBadge() {
