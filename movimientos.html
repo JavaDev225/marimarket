@@ -131,8 +131,8 @@
                 const fechaMov = obtenerTimestampMovimiento(mov);
                 const diferenciaMs = ahora - fechaMov;
 
-                // Mantiene facturas si la diferencia es <= 7 días y no son fechas del futuro desfasadas
-                return diferenciaMs >= 0 && diferenciaMs <= SIETE_DIAS_MS;
+                // Mantiene facturas si la diferencia es <= 7 días (evita purgas tempranas)
+                return diferenciaMs <= SIETE_DIAS_MS;
             });
 
             // Guardar consistencia de datos en LocalStorage
