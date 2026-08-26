@@ -173,13 +173,44 @@
         let inventoryData = [];
         let selectedCategory = 'Todas';
 
-        // PERSISTENCIA ESTRICTA: Se lee del storage sin sobreescribir si ya existe una tasa previa
+        // PERSISTENCIA ESTRICTA: Se lee del storage como fallback por si falla la API
         let storedTasa = localStorage.getItem('sys_tasa_dia');
         if (storedTasa === null || isNaN(parseFloat(storedTasa))) {
-            localStorage.setItem('sys_tasa_dia', '36.50');
             storedTasa = '36.50';
         }
         let tasaDia = parseFloat(storedTasa);
+
+        // Actualización Automática de Tasa BCV
+        async function actualizarTasaAutomatica() {
+            try {
+                // Usamos DolarAPI (CORS-friendly) para obtener la tasa oficial del BCV
+                const response = await fetch('https://ve.dolarapi.com/v1/dolares/oficial');
+                if (response.ok) {
+                    const data = await response.json();
+                    const nuevaTasa = data.promedio;
+                    
+                    if (nuevaTasa && !isNaN(nuevaTasa)) {
+                        if (nuevaTasa !== tasaDia) {
+                            // Registrar auditoría de historial si hay un cambio real
+                            const historialTasas = JSON.parse(localStorage.getItem('sys_historial_tasas')) || [];
+                            historialTasas.push({
+                                tasa: nuevaTasa,
+                                hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                                fecha: new Date().toLocaleDateString()
+                            });
+                            localStorage.setItem('sys_historial_tasas', JSON.stringify(historialTasas));
+                        }
+                        
+                        // Siempre se queda con la de la API por encima del localStorage
+                        tasaDia = nuevaTasa;
+                        localStorage.setItem('sys_tasa_dia', tasaDia.toString());
+                        calculateMetrics(); // Refrescar UI con la tasa actualizada de la API
+                    }
+                }
+            } catch (error) {
+                console.error("Error conectando a la API del BCV. Manteniendo la tasa actual en memoria.", error);
+            }
+        }
 
         // Configuración Supabase JS Client
         const SUPABASE_URL = "https://jmxxfojwmuyqcwgbrzsv.supabase.co"; 
@@ -659,6 +690,8 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             fetchInventoryData();
+            actualizarTasaAutomatica(); // Consultar tasa API del BCV al cargar o iniciar sesión
+            setInterval(actualizarTasaAutomatica, 2 * 60 * 60 * 1000); // Ejecutar validación cada 2 horas (7200000 ms)
         });
     </script>
 </body>
