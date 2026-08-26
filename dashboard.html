@@ -419,11 +419,25 @@
             const TEXT_MUTED = [100, 116, 139];     // Slate 500 (#64748b)
 
             const fechaHoraCierre = new Date().toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'medium' });
+            const fechaHoy = new Date().toLocaleDateString();
 
-            // Cargar Movimientos e Ingresos de Stock desde almacenamiento local
-            const movimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
-            const ingresosStock = JSON.parse(localStorage.getItem('sys_ingresos_stock_dia')) || JSON.parse(localStorage.getItem('sys_ingresos_stock')) || [];
-            const historialTasas = JSON.parse(localStorage.getItem('sys_historial_tasas')) || [];
+            // Cargar Movimientos e Ingresos de Stock desde almacenamiento local (FILTRADOS SOLO AL DÍA ACTUAL)
+            const todosMovimientos = JSON.parse(localStorage.getItem('sys_movimientos_dia')) || JSON.parse(localStorage.getItem('sys_movimientos_data')) || [];
+            const movimientos = todosMovimientos.filter(m => {
+                if (!m.fecha && !m.fechaHora) return true;
+                const mFecha = m.fecha || m.fechaHora.split(',')[0].trim();
+                return mFecha === fechaHoy;
+            });
+
+            const todosIngresos = JSON.parse(localStorage.getItem('sys_ingresos_stock_dia')) || JSON.parse(localStorage.getItem('sys_ingresos_stock')) || [];
+            const ingresosStock = todosIngresos.filter(i => {
+                if (!i.fecha && !i.fechaHora) return true;
+                const iFecha = i.fecha || i.fechaHora.split(',')[0].trim();
+                return iFecha === fechaHoy;
+            });
+
+            const todosHistorialTasas = JSON.parse(localStorage.getItem('sys_historial_tasas')) || [];
+            const historialTasas = todosHistorialTasas.filter(h => !h.fecha || h.fecha === fechaHoy);
 
             // Totales de métricas
             let totalProductosVendidos = 0;
