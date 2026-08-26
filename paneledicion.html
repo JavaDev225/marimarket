@@ -185,11 +185,12 @@
                 return;
             }
 
-            data.forEach(item => {
+            // Uso de index + 1 para numerar consecutivamente de 1 a N en la vista de la tabla
+            data.forEach((item, index) => {
                 const row = document.createElement('tr');
                 row.className = "hover:bg-slate-800/40 transition-colors";
                 row.innerHTML = `
-                    <td class="py-3 px-5 font-mono text-blue-400 font-medium">${item.id}</td>
+                    <td class="py-3 px-5 font-mono text-blue-400 font-medium">${index + 1}</td>
                     <td class="py-3 px-5 text-white font-medium">${item.descripcion}</td>
                     <td class="py-3 px-5 text-center font-semibold text-slate-200">${item.cantidad}</td>
                     <td class="py-3 px-5 text-center text-slate-400">${item.unidad}</td>
