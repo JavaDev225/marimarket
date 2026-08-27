@@ -21,7 +21,7 @@ jobs:
       run: npm install
 
     - name: Build Windows Executable
-      run: npx electron-builder --win nsis --config.files="**/*" --config.directories.output="dist"
+      run: npx electron-builder --win nsis -c.publish=never
 
     - name: Upload Artifact (.exe)
       uses: actions/upload-artifact@v4
