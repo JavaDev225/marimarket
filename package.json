@@ -13,6 +13,7 @@
   "build": {
     "appId": "com.marymarket.pos",
     "productName": "Mary Market POS",
+    "publish": null,
     "files": [
       "**/*"
     ],
